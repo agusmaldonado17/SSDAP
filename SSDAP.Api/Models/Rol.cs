@@ -19,6 +19,10 @@ namespace SSDAP.Api.Models
         [Column("descripcion")]
         public string? Descripcion { get; set; }
 
+        [MaxLength(30)]
+        [Column("codigo")]
+        public string? Codigo { get; set; }
+
         [Column("activo")]
         public bool Activo { get; set; }
     }

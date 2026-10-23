@@ -30,8 +30,10 @@ namespace SSDAP.Api.Models
 
         [Required]
         [MaxLength(255)]
-        [Column("password")]
-        public string Password { get; set; } = string.Empty;
+        [Column("password_hash")]
+        public string PasswordHash { get; set; } = string.Empty;
+
+        public string EmailNormalizado { get; set; } = string.Empty;
 
         [Column("activo")]
         public bool Activo { get; set; }

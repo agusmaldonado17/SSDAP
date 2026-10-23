@@ -1,4 +1,7 @@
 <Solution>
+  <Folder Name="/tests/">
+    <Project Path="tests/SSDAP.IntegrationChecks/SSDAP.IntegrationChecks.csproj" />
+  </Folder>
   <Project Path="SSDAP.Api/SSDAP.Api.csproj" Id="f338e16f-1982-4577-9b10-fa5c462aa424" />
   <Project Path="SSDAP.Mobile/SSDAP.Mobile.csproj" Id="1c9e5d20-6739-405f-827d-eb12f6ef0115">
     <Deploy Solution="Debug|*" />
