@@ -1,0 +1,27 @@
+@using SSDAP.Shared.DTOs.Reportes
+@using SSDAP.Web.Services
+<h2>Producción · @Datos.Mes.ToString("00")/@Datos.Anio</h2>
+<div class="metric-grid">
+    <div class="metric-card"><span>Volumen total estimado</span><strong>@Presentacion.Numero(Datos.VolumenTotalEstimadoM3) <small>m³</small></strong></div>
+    <div class="metric-card"><span>Caudal promedio</span><strong>@Presentacion.Numero(Datos.CaudalPromedioPeriodoM3H) <small>m³/h</small></strong></div>
+    <div class="metric-card"><span>Aporte de pozos</span><strong>@Presentacion.Numero(Datos.VolumenPozosM3) <small>m³</small></strong></div>
+    <div class="metric-card"><span>Aporte de acueductos</span><strong>@Presentacion.Numero(Datos.VolumenAcueductosM3) <small>m³</small></strong></div>
+</div>
+
+<details><summary>Detalle de producción y mediciones de cloro</summary>
+<div class="table-wrap"><table><thead><tr><th>Pozo (ID)</th><th>Horas programadas</th><th>Volumen estimado (m³)</th></tr></thead><tbody>
+@foreach (var pozo in Datos.Pozos) { <tr><td>@pozo.IdPozo</td><td>@Presentacion.Numero(pozo.HorasProgramadas)</td><td>@Presentacion.Numero(pozo.VolumenEstimadoM3)</td></tr> }
+</tbody></table></div>
+<div class="table-wrap"><table><thead><tr><th>Acueducto</th><th>Caudal (m³/h)</th><th>Horas del período</th><th>Volumen estimado (m³)</th></tr></thead><tbody>
+@foreach (var fuente in Datos.Acueductos) { <tr><td>@fuente.Nombre</td><td>@Presentacion.Numero(fuente.CaudalPromedioM3H)</td><td>@Presentacion.Numero(fuente.HorasPeriodo)</td><td>@Presentacion.Numero(fuente.VolumenEstimadoM3)</td></tr> }
+</tbody></table></div>
+<h3>Cloro medido durante el mes</h3>
+@if (Datos.Cloro.Count == 0) { <p>No hay mediciones de cloro en este período.</p> }
+else
+{
+    <div class="table-wrap"><table><thead><tr><th>Tipo</th><th>Mediciones</th><th>Mínimo (mg/L)</th><th>Máximo (mg/L)</th><th>Última medición</th><th>Valor (mg/L)</th></tr></thead><tbody>
+    @foreach (var item in Datos.Cloro) { <tr><td>@item.TipoCloro</td><td>@item.CantidadMediciones</td><td>@Presentacion.Numero(item.MinimoMgL)</td><td>@Presentacion.Numero(item.MaximoMgL)</td><td>@Presentacion.Fecha(item.UltimaMedicion.FechaHoraUtc)</td><td>@Presentacion.Numero(item.UltimaMedicion.ValorMgL)</td></tr> }
+    </tbody></table></div>
+}
+</details>
+@code { [Parameter, EditorRequired] public ProduccionMensualDto Datos { get; set; } = default!; }

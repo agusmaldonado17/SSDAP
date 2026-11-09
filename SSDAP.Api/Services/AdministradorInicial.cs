@@ -24,7 +24,7 @@ public static class AdministradorInicial
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         if ((await db.Database.GetPendingMigrationsAsync()).Any())
             throw new InvalidOperationException(
-                "Falta actualizar la base de datos. Ejecutá: dotnet ef database update PrepararAutenticacion --project SSDAP.Api");
+                "Falta actualizar la base de datos. Ejecutá: dotnet ef database update --project SSDAP.Api");
         // Ejecución explícita por consola; nunca se aplica una migración al arrancar la API.
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable);
         if (await db.Usuarios.AnyAsync())

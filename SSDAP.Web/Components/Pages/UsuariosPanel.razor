@@ -1,0 +1,148 @@
+@using SSDAP.Shared.DTOs.Usuarios
+@using SSDAP.Shared.DTOs.Roles
+@using SSDAP.Shared.DTOs.Localidades
+@using SSDAP.Web.Services
+@inherits PanelApiBase
+
+<span class="eyebrow">Administración</span>
+<h1>Usuarios</h1>
+<p class="muted">Gestioná las cuentas, sus roles y las localidades asignadas.</p>
+<EstadoOperacion Error="@Error" Mensaje="@Mensaje" Ocupado="Ocupado" />
+@if (!habilitado && !Ocupado)
+{
+    <button @onclick="CargarAsync">Volver a cargar</button>
+}
+@if (habilitado)
+{
+    @if (passwordUsuario is not null)
+    {
+        <PasswordEditor UsuarioId="passwordUsuario.IdUsuario" Nombre="@(passwordUsuario.Nombre + " " + passwordUsuario.Apellido)" Cancelar="() => passwordUsuario = null" Guardado="PasswordGuardado" SesionVencida="SesionVencida" />
+    }
+    else if (entrada is not null)
+    {
+        <section class="editor">
+            <h2>@(entrada.Id is null ? "Nuevo usuario" : "Editar usuario")</h2>
+            <EditForm Model="entrada" OnValidSubmit="GuardarAsync" FormName="usuario">
+                <DataAnnotationsValidator /><ValidationSummary />
+                <fieldset disabled="@Ocupado">
+                    <label for="usuario-nombre">Nombre</label><InputText id="usuario-nombre" maxlength="100" @bind-Value="entrada.Nombre" />
+                    <label for="usuario-apellido">Apellido</label><InputText id="usuario-apellido" maxlength="100" @bind-Value="entrada.Apellido" />
+                    <label for="usuario-email">Correo electrónico</label><InputText id="usuario-email" type="email" autocomplete="off" maxlength="100" @bind-Value="entrada.Email" />
+                    <label for="usuario-rol">Rol</label><InputSelect id="usuario-rol" @bind-Value="entrada.IdRol">
+                        <option value="0">Seleccioná un rol</option>
+                        @foreach (var rol in roles.Where(r => r.Activo || r.IdRol == entrada.IdRol))
+                        { <option value="@rol.IdRol" disabled="@(!rol.Activo)">@rol.Nombre@(!rol.Activo ? " (inactivo)" : "")</option> }
+                    </InputSelect>
+                    @if (entrada.Id is null)
+                    {
+                        <label for="usuario-password">Contraseña inicial</label><InputText id="usuario-password" type="password" autocomplete="new-password" maxlength="128" @bind-Value="entrada.Password" />
+                        
+                    }
+                    else
+                    {
+                        <label class="account-state-toggle"><InputCheckbox class="account-state-input" role="switch" aria-label="Cuenta activa" @bind-Value="entrada.Activo" /><span class="switch-track" aria-hidden="true"></span><span>@(entrada.Activo ? "Cuenta activa" : "Cuenta inactiva")</span></label>
+                        
+                    }
+                    <button class="action-primary" type="submit">Guardar usuario</button>
+                    <button type="button" @onclick="CerrarEditor">Volver al listado</button>
+                </fieldset>
+            </EditForm>
+        </section>
+    }
+    else if (usuarioLocalidades is not null)
+    {
+        <h2>Localidades de @usuarioLocalidades.Nombre @usuarioLocalidades.Apellido</h2>
+        
+        <button disabled="@Ocupado" @onclick="CerrarLocalidadesAsync">Volver al listado</button>
+        <label for="localidad-buscar">Buscar localidad</label>
+        <input class="assignment-search" id="localidad-buscar" type="search" @bind="busqueda" @bind:event="oninput" />
+        @if (localidades.Count == 0) { <p class="empty">No hay localidades disponibles.</p> }
+        <div class="table-wrap"><table><thead><tr><th>Localidad</th><th>Provincia</th><th>Estado</th><th>Asignación</th><th>Acción</th></tr></thead><tbody>
+        @foreach (var localidad in localidades.Where(l => l.Nombre.Contains(busqueda, StringComparison.OrdinalIgnoreCase)))
+        {
+            var asignada = asignadas.Contains(localidad.IdLocalidad);
+            <tr @key="localidad.IdLocalidad"><td>@localidad.Nombre</td><td>@localidad.Provincia</td><td>@localidad.Estado</td>
+                <td>@(asignada ? "Asignada" : "Sin asignar")</td><td><button class="row-action @(asignada ? "row-action-remove" : "")" disabled="@(Ocupado || !asignacionesCargadas)" @onclick="() => CambiarAsignacionAsync(localidad.IdLocalidad, !asignada)">@(asignada ? "Retirar" : "Asignar")</button></td></tr>
+        }
+        </tbody></table></div>
+    }
+    else
+    {
+        <button class="action-primary" disabled="@Ocupado" @onclick="Nuevo">Nuevo usuario</button>
+        @if (usuarios.Count == 0) { <p class="empty">No hay usuarios en esta página.</p> }
+        else
+        {
+            <div class="table-wrap"><table><thead><tr><th>Usuario</th><th>Correo</th><th>Rol</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>
+            @foreach (var usuario in usuarios)
+            {
+                <tr @key="usuario.IdUsuario"><td>@usuario.Nombre @usuario.Apellido</td><td>@usuario.Email</td><td>@usuario.Rol</td><td>@(usuario.Activo ? "Activo" : "Inactivo")</td>
+                    <td><div class="row-actions"><button class="row-action" disabled="@Ocupado" @onclick="() => EditarAsync(usuario.IdUsuario)">Editar</button><button class="row-action" disabled="@Ocupado" @onclick="() => AbrirLocalidadesAsync(usuario)">Localidades</button><button class="row-action row-action-secondary" disabled="@Ocupado" @onclick="() => passwordUsuario = usuario">Restablecer contraseña</button></div></td></tr>
+            }
+            </tbody></table></div>
+        }
+        <div class="pagination-bar"><button class="page-nav" disabled="@(Ocupado || pagina == 1)" @onclick="() => PaginarAsync(-1)">Anterior</button><span>Página @pagina</span><button class="page-nav" disabled="@(Ocupado || usuarios.Count < 50)" @onclick="() => PaginarAsync(1)">Siguiente</button></div>
+    }
+}
+
+@code {
+    private bool habilitado, asignacionesCargadas;
+    private int pagina = 1;
+    private List<UsuarioDto> usuarios = [];
+    private List<RolDto> roles = [];
+    private List<LocalidadDto> localidades = [];
+    private HashSet<int> asignadas = [];
+    private EntradaUsuario? entrada;
+    private UsuarioDto? usuarioLocalidades, passwordUsuario;
+    private void PasswordGuardado() { passwordUsuario = null; Mensaje = "Contraseña restablecida. Las sesiones anteriores quedaron invalidadas."; }
+    private string busqueda = "";
+    protected override Task OnInitializedAsync() => CargarAsync();
+    private Task CargarAsync() => EjecutarAsync(async () =>
+    {
+        habilitado = false;
+        usuarios = await Sesion.ObtenerAsync<List<UsuarioDto>>($"api/usuarios?pagina={pagina}");
+        roles = await Sesion.ObtenerAsync<List<RolDto>>("api/roles");
+        habilitado = true;
+    });
+    private Task PaginarAsync(int cambio) { pagina += cambio; return CargarAsync(); }
+    private void Nuevo() { entrada = new(); Error = null; Mensaje = null; }
+    private void CerrarEditor() { entrada = null; Error = null; Mensaje = null; }
+    private Task EditarAsync(int id) => EjecutarAsync(async () =>
+        entrada = EntradaUsuario.Desde(await Sesion.ObtenerAsync<UsuarioDto>($"api/usuarios/{id}")));
+    private Task GuardarAsync() => EjecutarAsync(async () =>
+    {
+        if (entrada is null) return;
+        var datos = entrada;
+        UsuarioDto usuario;
+        if (datos.Id is int id)
+            usuario = await Sesion.EnviarAsync<ActualizarUsuarioDto, UsuarioDto>(HttpMethod.Put, $"api/usuarios/{id}", datos.Edicion());
+        else
+            usuario = await Sesion.ConsultarAsync<CrearUsuarioDto, UsuarioDto>("api/usuarios", datos.Alta());
+        // Limpiar la contraseña y cerrar el alta antes de cualquier lectura posterior.
+        datos.Password = ""; entrada = null;
+        if (usuario.IdUsuario == Sesion.Actual!.Usuario.IdUsuario) await Sesion.ActividadAsync();
+        usuarioLocalidades = usuario; asignacionesCargadas = false;
+        Mensaje = "Usuario guardado. Podés gestionar sus localidades.";
+        await LeerAsignacionesAsync();
+    });
+    private Task AbrirLocalidadesAsync(UsuarioDto usuario) => EjecutarAsync(async () =>
+    {
+        usuarioLocalidades = usuario; busqueda = "";
+        await LeerAsignacionesAsync();
+    });
+    private async Task LeerAsignacionesAsync()
+    {
+        asignacionesCargadas = false; asignadas.Clear(); localidades.Clear();
+        localidades = await LeerPaginasAsync<LocalidadDto>("api/localidades");
+        asignadas = (await LeerPaginasAsync<LocalidadDto>($"api/usuarios/{usuarioLocalidades!.IdUsuario}/localidades")).Select(l => l.IdLocalidad).ToHashSet();
+        asignacionesCargadas = true;
+    }
+    private Task CambiarAsignacionAsync(int id, bool asignar) => EjecutarAsync(async () =>
+    {
+        if (!asignacionesCargadas) return;
+        await Sesion.EnviarAsync<object?>(asignar ? HttpMethod.Put : HttpMethod.Delete,
+            $"api/usuarios/{usuarioLocalidades!.IdUsuario}/localidades/{id}", null);
+        if (asignar) asignadas.Add(id); else asignadas.Remove(id);
+        Mensaje = asignar ? "Localidad asignada." : "Asignación retirada.";
+    });
+    private Task CerrarLocalidadesAsync() { usuarioLocalidades = null; return CargarAsync(); }
+}

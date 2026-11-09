@@ -1,0 +1,60 @@
+@using SSDAP.Shared.DTOs.Alertas
+@using SSDAP.Web.Services
+@inherits PanelLocalidadBase
+<span class="eyebrow">@Localidad.Nombre</span><h1>Revisión operativa</h1>
+<p class="muted">Revisión de fuentes y baterías activas. Los avisos de calidad comparan los análisis con los límites configurados; no certifican potabilidad.</p>
+<EstadoOperacion Error="@Error" Ocupado="Ocupado" />
+<div class="period-filter"><div><label for="alertas-tipo">Revisar</label><select id="alertas-tipo" @bind="tipo" disabled="@Ocupado"><option value="fuentes">Fuentes</option><option value="baterias">Baterías</option></select></div>
+@if (tipo == "fuentes") { <div><label for="alertas-dias">Antigüedad máxima del análisis (días, opcional)</label><input id="alertas-dias" type="number" min="0" max="36500" step="1" @bind="dias" disabled="@Ocupado" /></div> }
+<button disabled="@Ocupado" @onclick="BuscarAsync">Revisar</button></div>
+@if (fuentes is not null)
+{
+    <p>Fuentes activas: @fuentes.TotalElementos · Fecha de referencia: @fuentes.FechaReferencia.ToString("dd/MM/yyyy") · @(fuentes.MaxDiasAntiguedad is null ? "Sin umbral de antigüedad" : $"Máximo {fuentes.MaxDiasAntiguedad} días")</p>
+    @foreach (var fila in fuentes.Elementos)
+    {
+        <section class="selection-row"><h2>@fila.Nombre</h2><p>@(fila.IdAnalisis is null ? "Sin análisis utilizable" : $"Análisis #{fila.IdAnalisis} del {fila.FechaAnalisis:dd/MM/yyyy}")</p>
+        @if (fila.Alertas.Count == 0) { <p>Sin alertas operativas detectadas.</p> }
+        else { <ul>@foreach (var aviso in fila.Alertas) { <li>@Presentacion.Alerta(aviso)</li> }</ul> }
+        <details><summary>Comparación de calidad</summary><div class="table-wrap"><table><thead><tr><th>Parámetro</th><th>Valor</th><th>Unidad</th><th>Evaluación</th></tr></thead><tbody>
+        @foreach (var parametro in fila.Calidad) { <tr><td>@parametro.Codigo</td><td>@Presentacion.Numero(parametro.Valor)</td><td>@parametro.Unidad</td><td><span class="evaluation-badge" data-state="@parametro.Estado">@Presentacion.Estado(parametro.Estado)</span></td></tr> }
+        </tbody></table></div></details></section>
+    }
+    @if (fuentes.Elementos.Count == 0) { <p class="empty">No hay fuentes activas en esta página.</p> }
+}
+@if (baterias is not null)
+{
+    <p>Baterías activas: @baterias.TotalElementos · Fecha de referencia: @baterias.FechaReferencia.ToString("dd/MM/yyyy")</p>
+    @foreach (var fila in baterias.Elementos)
+    {
+        <section class="selection-row"><h2>@fila.Nombre</h2>
+        @if (fila.Alertas.Count == 0) { <p>Sin alertas operativas detectadas.</p> }
+        else { <ul>@foreach (var aviso in fila.Alertas) { <li>@Presentacion.Alerta(aviso)</li> }</ul> }
+        @if (fila.PozosConProblemas.Count > 0) { <p>Identificadores de pozos a revisar: @string.Join(", ", fila.PozosConProblemas)</p> }
+        </section>
+    }
+    @if (baterias.Elementos.Count == 0) { <p class="empty">No hay baterías activas en esta página.</p> }
+}
+@if (fuentes is not null || baterias is not null)
+{
+    <div class="pagination-bar"><button class="page-nav" disabled="@(Ocupado || pagina == 1)" @onclick="() => PaginarAsync(-1)">Anterior</button><span>Página @pagina</span><button class="page-nav" disabled="@(Ocupado || !(fuentes?.HayMas ?? baterias?.HayMas ?? false))" @onclick="() => PaginarAsync(1)">Siguiente</button></div>
+}
+@code {
+    private string tipo = "fuentes", tipoConsultado = "fuentes";
+    private int? dias, diasConsultados;
+    private int pagina = 1;
+    private PaginaAlertasDto<FuenteAlertasDto>? fuentes;
+    private PaginaAlertasDto<BateriaAlertasDto>? baterias;
+    protected override Task OnInitializedAsync() => BuscarAsync();
+    private Task BuscarAsync() { pagina = 1; tipoConsultado = tipo; diasConsultados = dias; return CargarAsync(); }
+    private Task PaginarAsync(int delta) { pagina += delta; return CargarAsync(); }
+    private Task CargarAsync() => EjecutarAsync(async () =>
+    {
+        fuentes = null; baterias = null;
+        if (tipoConsultado == "fuentes")
+        {
+            if (diasConsultados is < 0 or > 36500) throw new ErrorApi(400, "La antigüedad debe estar entre 0 y 36500 días o quedar vacía.");
+            fuentes = await Sesion.ObtenerAsync<PaginaAlertasDto<FuenteAlertasDto>>($"{RutaLocalidad}/alertas/fuentes?pagina={pagina}" + (diasConsultados.HasValue ? $"&maxDiasAntiguedad={diasConsultados}" : ""));
+        }
+        else baterias = await Sesion.ObtenerAsync<PaginaAlertasDto<BateriaAlertasDto>>($"{RutaLocalidad}/alertas/baterias?pagina={pagina}");
+    });
+}

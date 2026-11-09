@@ -20,4 +20,10 @@ public sealed class LocalidadesController(LocalidadService service) : Controller
         var localidad = await service.CrearAsync(datos, ct);
         return CreatedAtAction(nameof(Obtener), new { id = localidad.IdLocalidad }, localidad);
     }
+
+    [HttpPut("{id:int}"), EndpointSummary("Edita datos y estado administrativo de una localidad.")]
+    [EndpointDescription("Inactiva conserva consultas, datos y asignaciones; no revoca permisos.")]
+    public async Task<ActionResult<LocalidadDto>> Actualizar([Range(1, int.MaxValue)] int id, ActualizarLocalidadDto datos, CancellationToken ct)
+        => Ok(await service.ActualizarAsync(id, datos, ct));
 }
+ 

@@ -1,0 +1,71 @@
+@using SSDAP.Shared.DTOs.Fuentes
+@using SSDAP.Shared.DTOs.Cloro
+@using SSDAP.Shared.DTOs.Calendario
+@using SSDAP.Shared.DTOs.Alertas
+@inherits PanelMovil
+<p class="eyebrow">@Presentacion.Ahora.ToString("dddd d MMMM", System.Globalization.CultureInfo.GetCultureInfo("es-AR"))</p>
+<h1>Resumen de hoy</h1>
+<EstadoMovil Error="@Error" Ocupado="Ocupado" />
+<div class="quick-actions"><button class="primary" @onclick='() => Ir.InvokeAsync("cloro")'>Registrar cloro</button><button @onclick='() => Ir.InvokeAsync("agenda")'>Agenda de hoy</button></div>
+
+@if(cargado)
+{
+    <div class="stats"><article class="card"><strong>@fuentes.Count(f=>f.Estado=="Activa") / @fuentes.Count</strong><span>Fuentes activas</span></article><article class="card"><strong>@turnos</strong><span>Turnos de hoy</span></article></div>
+    <section class="card"><h2>Último cloro medido</h2>
+    @if(cloro is null) { <p>No hay mediciones registradas.</p> }
+    else { <strong class="production-total">@Presentacion.Numero(cloro.ValorMgL) <small>mg/L</small></strong><p class="muted">@Presentacion.Fecha(cloro.FechaHoraUtc) · @cloro.TipoCloro</p> }
+    </section>
+    <section><h2>Revisión operativa</h2>
+    @if(avisos.Count==0) { <p>No hay avisos en las fuentes evaluadas.</p> }
+    @foreach(var fuente in avisos)
+    {
+        @foreach(var aviso in fuente.Alertas)
+        {
+            <article class="card operational-card">
+                <span class="operational-label" data-severity="@(aviso == "CalidadFueraDeRango" ? "danger" : "warning")">@TituloAviso(aviso)</span>
+                <p>@fuente.Nombre · @DetalleAviso(aviso)</p>
+            </article>
+        }
+    }
+    </section>
+}
+@code {
+    [Parameter] public EventCallback<string> Ir { get; set; }
+    private List<FuenteResumenDto> fuentes=[];
+    private List<FuenteAlertasDto> avisos=[];
+    private MedicionCloroDto? cloro;
+    private int turnos;
+    private bool cargado;
+    private static string TituloAviso(string aviso) => aviso switch
+    {
+        "CalidadFueraDeRango" => "Revisar calidad",
+        "CaudalNoPositivo" => "Verificar caudal",
+        "SinAnalisis" or "AnalisisAntiguo" or "AnalisisConFechaFutura" or "CalidadNoEvaluadaCompletamente" => "Verificar análisis",
+        _ => "Revisar fuente"
+    };
+    private static string DetalleAviso(string aviso) => aviso switch
+    {
+        "SinAnalisis" => "análisis pendiente",
+        "AnalisisAntiguo" => "análisis desactualizado",
+        "AnalisisConFechaFutura" => "fecha de análisis futura",
+        "CalidadNoEvaluadaCompletamente" => "evaluación incompleta",
+        "CalidadFueraDeRango" => "parámetros fuera de rango",
+        "CaudalNoPositivo" => "caudal sin aporte",
+        _ => Presentacion.Alerta(aviso)
+    };
+    protected override Task OnInitializedAsync()=>CargarAsync();
+    private Task CargarAsync()=>EjecutarAsync(async()=>{
+        cargado=false;
+        fuentes=await Sesion.TodasAsync<FuenteResumenDto>($"{Ruta}/fuentes");
+        cloro=(await Sesion.ObtenerAsync<List<MedicionCloroDto>>($"{Ruta}/mediciones-cloro?pagina=1")).FirstOrDefault();
+        var hoy=Presentacion.Ahora.Date;
+        var agenda=await Sesion.TodasAsync<ProgramacionDto>($"{Ruta}/calendario?anio={hoy.Year}&mes={hoy.Month}");
+        turnos=agenda.Count(t=>AgendaMovil.EnDia(t,hoy));
+        avisos=[];
+        for(var p=1;;p++) {
+            var lote=await Sesion.ObtenerAsync<PaginaAlertasDto<FuenteAlertasDto>>($"{Ruta}/alertas/fuentes?pagina={p}");
+            avisos.AddRange(lote.Elementos.Where(f=>f.Alertas.Count>0)); if(!lote.HayMas) break;
+        }
+        cargado=true;
+    });
+}

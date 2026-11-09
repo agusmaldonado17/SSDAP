@@ -1,0 +1,67 @@
+@using SSDAP.Shared.DTOs.Fuentes
+@inherits PanelMovil
+@inject NavegadorExterno Navegador
+<h1>Fuentes de agua</h1>
+<EstadoMovil Error="@Error" Mensaje="@Mensaje" Ocupado="Ocupado" />
+@if(detalle is null)
+{
+    <label class="search-field"><span class="sr-only">Buscar por nombre</span><input type="search" placeholder="Buscar fuente…" @bind="busqueda" @bind:event="oninput" /></label>
+    <div class="filter-grid">
+        <label>Tipo<select @bind="tipoFiltro"><option value="">Todos</option><option>Pozo</option><option>Acueducto</option></select></label>
+        <label>Estado<select @bind="estadoFiltro"><option value="">Todos</option><option>Activa</option><option>Inactiva</option><option>Mantenimiento</option></select></label>
+    </div>
+    <div class="quick-actions"><button disabled="@Ocupado" @onclick="AbrirMapaAsync">Mapa de pozos</button></div>
+    @if(verMapa) { <MapaMovil @key="revision" Pozos="pozosMapa" /><button @onclick="() => verMapa=false">Cerrar mapa</button> }
+    @foreach(var fuente in FuentesFiltradas)
+    { <button class="card source" disabled="@Ocupado" @onclick="() => AbrirAsync(fuente.IdFuente)"><strong>@fuente.Nombre</strong><span class="source-type">@fuente.TipoFuente</span><span class="state-badge" data-state="@fuente.Estado">@fuente.Estado</span><span class="source-flow">@Presentacion.Numero(fuente.CaudalM3H) <small>m³/h</small></span></button> }
+    @if(!Ocupado && Error is null && fuentes.Count==0) { <p class="empty-state">No hay fuentes registradas.</p> }
+    else if(!Ocupado && Error is null && !FuentesFiltradas.Any()) { <div class="empty-state"><p>No hay fuentes que coincidan con los filtros.</p><button @onclick="LimpiarFiltros">Limpiar filtros</button></div> }
+}
+else
+{
+    <button disabled="@Ocupado" @onclick="Cerrar">← Volver a fuentes</button>
+    <article class="card"><h2>@detalle.Fuente.Nombre</h2><p>@detalle.Fuente.TipoFuente · @detalle.Fuente.Estado</p><strong>@Presentacion.Numero(detalle.Fuente.CaudalM3H) m³/h</strong><p>@detalle.Fuente.Observaciones</p>
+    @if(detalle.Pozo is not null) { <p>Código: @detalle.Pozo.Codigo</p><p>@detalle.Pozo.Latitud, @detalle.Pozo.Longitud</p><button @onclick="AbrirUbicacionAsync">Abrir en Google Maps</button> }
+    </article>
+    <section class="card"><h2>Estado operativo</h2>
+    <label>Estado<select @bind="estado" disabled="@Ocupado"><option value="Activa">Activa</option><option value="Inactiva">Inactiva</option><option value="Mantenimiento">Mantenimiento</option></select></label>
+    @if(confirmar) { <p>¿Cambiar el estado a @estado? Esto actualiza el registro; no acciona ninguna bomba.</p><button class="primary" disabled="@Ocupado" @onclick="GuardarEstadoAsync">Confirmar cambio</button><button disabled="@Ocupado" @onclick="() => confirmar=false">Volver</button> }
+    else { <button disabled="@(Ocupado || estado==detalle.Fuente.Estado)" @onclick="() => confirmar=true">Cambiar estado</button> }
+    </section>
+    <CalidadMovil @key="detalle.Fuente.IdFuente" Localidad="Localidad" IdFuente="detalle.Fuente.IdFuente" />
+}
+@code {
+    private List<FuenteResumenDto> fuentes=[];
+    private List<FuenteDto> pozosMapa=[];
+    private FuenteDto? detalle;
+    private string busqueda="",estado="",tipoFiltro="",estadoFiltro="";
+    private IEnumerable<FuenteResumenDto> FuentesFiltradas => fuentes.Where(f =>
+        f.Nombre.Contains(busqueda.Trim(), StringComparison.OrdinalIgnoreCase) &&
+        (tipoFiltro.Length == 0 || f.TipoFuente == tipoFiltro) &&
+        (estadoFiltro.Length == 0 || f.Estado == estadoFiltro));
+    private void LimpiarFiltros() { busqueda=""; tipoFiltro=""; estadoFiltro=""; }
+    private bool confirmar,verMapa;
+    private int revision;
+    protected override Task OnInitializedAsync()=>CargarAsync();
+    private Task CargarAsync()=>EjecutarAsync(async()=>{ fuentes=[]; verMapa=false; fuentes=await Sesion.TodasAsync<FuenteResumenDto>($"{Ruta}/fuentes"); });
+    private Task AbrirAsync(int id)=>EjecutarAsync(async()=>{ detalle=await Sesion.ObtenerAsync<FuenteDto>($"{Ruta}/fuentes/{id}");estado=detalle.Fuente.Estado;confirmar=false; });
+    private Task GuardarEstadoAsync()=>EjecutarAsync(async()=>{
+        await Sesion.EnviarAsync(HttpMethod.Patch,$"{Ruta}/fuentes/{detalle!.Fuente.IdFuente}/estado",new CambiarEstadoFuenteDto { Estado=estado });
+        confirmar=false; Mensaje="Estado actualizado.";
+        detalle=await Sesion.ObtenerAsync<FuenteDto>($"{Ruta}/fuentes/{detalle.Fuente.IdFuente}");
+        fuentes=await Sesion.TodasAsync<FuenteResumenDto>($"{Ruta}/fuentes");
+    });
+    private void Cerrar() { detalle=null; confirmar=false; Mensaje=null; Error=null; }
+    private Task AbrirMapaAsync()=>EjecutarAsync(async()=>{
+        verMapa=false; pozosMapa=[];
+        foreach(var f in fuentes.Where(f=>f.TipoFuente=="Pozo")) pozosMapa.Add(await Sesion.ObtenerAsync<FuenteDto>($"{Ruta}/fuentes/{f.IdFuente}"));
+        revision++;verMapa=true;
+    });
+    private Task AbrirUbicacionAsync() => EjecutarAsync(async () => {
+        if (detalle is null || !MapaMovil.TieneCoordenadas(detalle))
+            throw new ErrorMovil(400, "El pozo no tiene coordenadas válidas para abrir el mapa.");
+        var p=detalle!.Pozo!;
+        var punto=FormattableString.Invariant($"{p.Latitud},{p.Longitud}");
+        await Navegador.AbrirAsync(new Uri($"https://www.google.com/maps/search/?api=1&query={Uri.EscapeDataString(punto)}"));
+    });
+}

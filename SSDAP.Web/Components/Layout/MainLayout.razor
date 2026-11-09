@@ -1,23 +1,21 @@
-﻿@inherits LayoutComponentBase
-
-<div class="page">
-    <div class="sidebar">
-        <NavMenu />
+@inherits LayoutComponentBase
+@using Microsoft.AspNetCore.Components.Sections
+<a class="skip-link" href="#contenido">Ir al contenido</a>
+<header class="institutional-header">
+    <a class="header-brand" href="/" aria-label="SSDAP · Inicio"><img src="brand/adc-compacto.jpg" alt="ADC" width="2658" height="678" /></a>
+    <div class="header-actions">
+        <button class="menu-toggle" aria-controls="menu-lateral" aria-expanded="@menuVisible" @onclick="() => menuVisible = !menuVisible">Menú</button>
+        <SectionOutlet SectionName="cuenta" />
     </div>
-
-    <main>
-        <div class="top-row px-4">
-            <a href="https://learn.microsoft.com/aspnet/core/" target="_blank">About</a>
-        </div>
-
-        <article class="content px-4">
-            @Body
-        </article>
-    </main>
+</header>
+<div class="app-shell">
+    <aside id="menu-lateral" class="brand-panel @(menuVisible ? "menu-visible" : "")">
+        <a class="brand" href="/">SSDAP<span>AGUA POTABLE</span></a>
+        <div class="sidebar-navigation"><SectionOutlet SectionName="navegacion" /></div>
+    </aside>
+    <main id="contenido" tabindex="-1">@Body</main>
 </div>
-
+@code { private bool menuVisible; }
 <div id="blazor-error-ui" data-nosnippet>
-    An unhandled error has occurred.
-    <a href="." class="reload">Reload</a>
-    <span class="dismiss">🗙</span>
+    Se perdió la conexión con la aplicación. <a href="">Recargar</a>
 </div>

@@ -14,13 +14,13 @@ public sealed class RolesController(RolService rolService) : ControllerBase
 {
     [HttpGet]
     [EndpointSummary("Lista los roles registrados.")]
-    [EndpointDescription("El filtro activo es opcional. Sin filtro devuelve todos los roles; si no hay coincidencias devuelve una lista vacía.")]
+    [EndpointDescription("Devuelve el listado completo de roles, sin filtro por estado.")]
     [ProducesResponseType<List<RolDto>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<List<RolDto>>> Listar(
-        [FromQuery] bool? activo, CancellationToken cancellationToken)
+        CancellationToken cancellationToken)
     {
-        return Ok(await rolService.ListarAsync(activo, cancellationToken));
+        return Ok(await rolService.ListarAsync(cancellationToken));
     }
 
     [HttpGet("{id:int}")]

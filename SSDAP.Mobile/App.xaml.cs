@@ -1,4 +1,4 @@
-﻿namespace SSDAP.Mobile
+namespace SSDAP.Mobile
 {
     public partial class App : Application
     {
@@ -9,7 +9,7 @@
 
         protected override Window CreateWindow(IActivationState? activationState)
         {
-            return new Window(new MainPage()) { Title = "SSDAP.Mobile" };
+            return new Window(new MainPage()) { Title = "SSDAP" };
         }
     }
 }

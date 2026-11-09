@@ -1,0 +1,59 @@
+@using System.ComponentModel.DataAnnotations
+@using SSDAP.Shared.DTOs.Localidades
+@using SSDAP.Web.Services
+@inject SesionWeb Sesion
+<section class="editor">
+    <h2>@(Localidad is null ? "Nueva localidad" : "Editar localidad")</h2>
+    <EstadoOperacion Error="@error" Ocupado="ocupado" />
+    <EditForm Model="entrada" OnValidSubmit="GuardarAsync" FormName="localidad-editor">
+        <DataAnnotationsValidator /><ValidationSummary />
+        <fieldset disabled="@ocupado">
+            <div class="form-grid">
+                <div><label for="localidad-nombre">Nombre</label><InputText id="localidad-nombre" @bind-Value="entrada.Nombre" maxlength="100" /></div>
+                <div><label for="localidad-provincia">Provincia</label><InputText id="localidad-provincia" @bind-Value="entrada.Provincia" maxlength="100" /></div>
+            </div>
+            @if (Localidad is not null)
+            {
+                <label for="localidad-estado">Estado</label><InputSelect id="localidad-estado" @bind-Value="entrada.Estado"><option value="Activa">Activa</option><option value="Inactiva">Inactiva</option></InputSelect>
+                <p class="muted">Inactivar conserva datos y asignaciones; no revoca el acceso de los usuarios.</p>
+            }
+            <div class="actions"><button type="submit" class="primary">Guardar localidad</button><button type="button" @onclick="Cancelar">Cancelar</button></div>
+        </fieldset>
+    </EditForm>
+</section>
+@code {
+    [Parameter] public LocalidadDto? Localidad { get; set; }
+    [Parameter] public EventCallback Guardado { get; set; }
+    [Parameter] public EventCallback Cancelar { get; set; }
+    [Parameter] public EventCallback SesionVencida { get; set; }
+    private Entrada entrada = new();
+    private bool ocupado;
+    private string? error;
+    protected override void OnInitialized()
+    {
+        if (Localidad is not null) entrada = new() { Nombre = Localidad.Nombre, Provincia = Localidad.Provincia, Estado = Localidad.Estado };
+    }
+    private async Task GuardarAsync()
+    {
+        if (ocupado) return;
+        ocupado = true; error = null;
+        try
+        {
+            if (Localidad is null)
+                await Sesion.EnviarAsync(HttpMethod.Post, "api/localidades", new CrearLocalidadDto { Nombre = entrada.Nombre.Trim(), Provincia = entrada.Provincia.Trim() });
+            else
+                await Sesion.EnviarAsync(HttpMethod.Put, $"api/localidades/{Localidad.IdLocalidad}", new ActualizarLocalidadDto { Nombre = entrada.Nombre.Trim(), Provincia = entrada.Provincia.Trim(), Estado = entrada.Estado });
+            await Guardado.InvokeAsync();
+        }
+        catch (ErrorApi ex) { error = ex.Message; if (ex.Estado == 401) await SesionVencida.InvokeAsync(); }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        { error = "No se pudo confirmar el guardado. Consultá el listado antes de volver a intentarlo."; }
+        finally { ocupado = false; }
+    }
+    public sealed class Entrada
+    {
+        [Required(ErrorMessage = "Ingresá el nombre."), StringLength(100)] public string Nombre { get; set; } = "";
+        [Required(ErrorMessage = "Ingresá la provincia."), StringLength(100)] public string Provincia { get; set; } = "";
+        [Required, RegularExpression("^(Activa|Inactiva)$")] public string Estado { get; set; } = "Activa";
+    }
+}

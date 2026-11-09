@@ -1,4 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace SSDAP.Api.Models
@@ -24,9 +24,6 @@ namespace SSDAP.Api.Models
 
         [Column("caudal", TypeName = "decimal(10,2)")]
         public decimal Caudal { get; set; }
-
-        [Column("potencia_kw", TypeName = "decimal(10,2)")]
-        public decimal PotenciaKw { get; set; }
 
         [Required]
         [MaxLength(30)]

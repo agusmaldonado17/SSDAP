@@ -1,0 +1,180 @@
+@using System.Globalization
+@using System.ComponentModel.DataAnnotations
+@using SSDAP.Shared.DTOs.Localidades
+@using SSDAP.Shared.DTOs.Baterias
+@using SSDAP.Shared.DTOs.Calendario
+@using SSDAP.Web.Services
+@inject SesionWeb Sesion
+
+<span class="eyebrow">@Localidad.Nombre · @Localidad.Provincia</span>
+<h1>Calendario de baterías</h1>
+<p class="muted">Programá días y horarios de funcionamiento. Todos los horarios corresponden a Argentina.</p>
+@if (error is not null) { <div class="notice" role="alert">@error</div> }
+@if (mensaje is not null) { <p role="status">@mensaje</p> }
+@if (multiples)
+{ <TurnosMultiplesEditor Localidad="Localidad" Mes="@periodo" Guardado="LoteGuardadoAsync" Cancelar="() => multiples = false" SesionVencida="SesionVencida" /> }
+else if (editor is not null)
+{
+    <section class="editor">
+    <h2>@(turnoEditado is null ? "Nuevo turno" : "Editar turno")</h2>
+    <EditForm Model="editor" OnValidSubmit="GuardarAsync" FormName="turno">
+        <DataAnnotationsValidator /><ValidationSummary />
+        <fieldset disabled="@ocupado">
+        <label for="bateria-turno">Batería</label>
+        <InputSelect id="bateria-turno" @bind-Value="editor.IdBateria" disabled="@(turnoEditado is not null)"><option value="">Seleccioná una batería</option>
+        @foreach (var bateria in baterias) { <option value="@bateria.IdBateria">@bateria.Nombre (@bateria.Estado)</option> }
+        </InputSelect>
+        <div class="form-grid">
+            <div><label for="inicio-turno">Inicio</label><InputDate id="inicio-turno" Type="InputDateType.DateTimeLocal" @bind-Value="editor.Inicio" /></div>
+            <div><label for="fin-turno">Fin</label><InputDate id="fin-turno" Type="InputDateType.DateTimeLocal" @bind-Value="editor.Fin" /></div>
+        </div>
+        <label for="notas-turno">Observaciones (opcional)</label><InputTextArea id="notas-turno" @bind-Value="editor.Observaciones" maxlength="255" />
+        <div class="actions"><button type="submit" class="primary">Guardar turno</button><button type="button" @onclick="CerrarEditor">Volver sin guardar</button></div>
+        </fieldset>
+    </EditForm>
+    </section>
+}
+else
+{
+    <div class="period-filter"><div><label for="mes-calendario">Mes</label><input id="mes-calendario" type="month" value="@periodo" @onchange="e => periodo = e.Value?.ToString() ?? string.Empty" disabled="@ocupado" /></div><button disabled="@ocupado" @onclick="ConsultarAsync">Consultar</button><button disabled="@ocupado" @onclick="NuevoAsync">Nuevo turno</button><button disabled="@ocupado" @onclick="() => multiples = true">Programar varios días</button></div>
+    @if (cancelando is not null)
+    {
+        <div class="notice" role="alert">¿Cancelar el turno de @cancelando.NombreBateria del @Fecha(cancelando.Inicio)? Se conservará en el historial.
+            <div class="actions"><button disabled="@ocupado" @onclick="CancelarAsync">Confirmar cancelación</button> <button disabled="@ocupado" @onclick="() => cancelando = null">Volver</button></div>
+        </div>
+    }
+    @if (ocupado) { <p role="status">Cargando…</p> }
+    @if (consultado is not null)
+    {
+        <h2>Agenda · @consultado</h2>
+        @if (produccion is not null) { <div class="summary-volume"><strong>@produccion.VolumenEstimadoM3.ToString("N2", Cultura) m³</strong> de producción programada de pozos en el mes.<br /><small>Estimación según los turnos guardados; no es una medición ni incluye acueductos.</small></div> }
+        <label class="calendar-history"><input type="checkbox" @bind="mostrarCancelados" /> Mostrar turnos cancelados</label>
+
+        @if (seleccionado is not null)
+        {
+            <section class="editor" aria-label="Detalle del turno">
+                <h3>@seleccionado.NombreBateria</h3>
+                <p>@Fecha(seleccionado.Inicio) → @Fecha(seleccionado.Fin) · @seleccionado.Estado</p>
+                <p>Pozos: @string.Join(", ", seleccionado.Pozos.Select(p => $"{p.Codigo} ({p.CaudalM3H.ToString("N2", Cultura)} m³/h)"))</p>
+                @if (!string.IsNullOrWhiteSpace(seleccionado.Observaciones)) { <p>@seleccionado.Observaciones</p> }
+                <div class="actions">
+                @if (seleccionado.Estado != "Cancelada")
+                {
+                    <button disabled="@ocupado" @onclick="() => EditarAsync(seleccionado.IdProgramacion)">Editar</button>
+                    <button disabled="@ocupado" @onclick="() => cancelando = seleccionado">Cancelar turno</button>
+                }
+                <button @onclick="() => seleccionado = null">Cerrar detalle</button>
+                </div>
+            </section>
+        }
+        <AgendaMensual PrimerDia="@DateTime.ParseExact(consultado, "yyyy-MM", CultureInfo.InvariantCulture)" Turnos="@turnos.Where(t => mostrarCancelados || t.Estado != "Cancelada").ToList()" Ocupado="ocupado" Seleccionar="t => seleccionado = t" />
+    }
+}
+@code {
+    [Parameter, EditorRequired] public LocalidadDto Localidad { get; set; } = default!;
+    [Parameter] public EventCallback SesionVencida { get; set; }
+    private static readonly CultureInfo Cultura = CultureInfo.GetCultureInfo("es-AR");
+    private static readonly TimeZoneInfo Zona = TimeZoneInfo.FindSystemTimeZoneById("America/Argentina/Buenos_Aires");
+    private string periodo = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, Zona).ToString("yyyy-MM", CultureInfo.InvariantCulture);
+    private string? consultado, error, mensaje;
+    private bool mostrarCancelados;
+    private ProgramacionDto? seleccionado;
+    private bool ocupado, multiples;
+    private async Task LoteGuardadoAsync() { multiples = false; await ConsultarAsync(); if (error is null) mensaje = "Turnos guardados."; }
+    private List<ProgramacionDto> turnos = [];
+    private List<BateriaResumenDto> baterias = [];
+    private ProduccionProgramadaDto? produccion;
+    private ProgramacionDto? turnoEditado, cancelando;
+    private EntradaTurno? editor;
+    private string Ruta => $"api/localidades/{Localidad.IdLocalidad}/calendario";
+    protected override Task OnInitializedAsync() => ConsultarAsync();
+    private Task ConsultarAsync() { cancelando = null; seleccionado = null; return EjecutarAsync(() => LeerAsync(periodo)); }
+    private async Task LeerAsync(string mes)
+    {
+        if (!DateTime.TryParseExact(mes, "yyyy-MM", CultureInfo.InvariantCulture, DateTimeStyles.None, out var fecha) || fecha.Year < 1000 || fecha.Year > 9998)
+            throw new ErrorApi(400, "Seleccioná un mes válido.");
+        turnos = []; produccion = null; consultado = null;
+        seleccionado = null;
+        var todos = new List<ProgramacionDto>();
+        for (var pagina = 1; ; pagina++)
+        {
+            var lote = await Sesion.ObtenerAsync<List<ProgramacionDto>>($"{Ruta}?anio={fecha.Year}&mes={fecha.Month}&pagina={pagina}");
+            todos.AddRange(lote);
+            if (lote.Count < 50) break;
+        }
+        turnos = todos;
+        consultado = mes;
+        produccion = await Sesion.ObtenerAsync<ProduccionProgramadaDto>($"{Ruta}/produccion?anio={fecha.Year}&mes={fecha.Month}");
+    }
+    private async Task BateriasAsync()
+    {
+        baterias = [];
+        for (var p = 1; ; p++)
+        {
+            var lote = await Sesion.ObtenerAsync<List<BateriaResumenDto>>($"api/localidades/{Localidad.IdLocalidad}/baterias?pagina={p}");
+            baterias.AddRange(lote);
+            if (lote.Count < 50) break;
+        }
+    }
+    private Task NuevoAsync() => EjecutarAsync(async () =>
+    {
+        await BateriasAsync();
+        if (!DateTime.TryParseExact(periodo, "yyyy-MM", CultureInfo.InvariantCulture, DateTimeStyles.None, out var fecha)) throw new ErrorApi(400, "Seleccioná un mes válido.");
+        turnoEditado = null;
+        editor = new() { Inicio = fecha.AddHours(8), Fin = fecha.AddHours(16) };
+    });
+    private Task EditarAsync(int id) => EjecutarAsync(async () =>
+    {
+        var turno = await Sesion.ObtenerAsync<ProgramacionDto>($"{Ruta}/{id}");
+        await BateriasAsync();
+        turnoEditado = turno;
+        editor = new() { IdBateria = turno.IdBateria, Inicio = Local(turno.Inicio), Fin = Local(turno.Fin), Observaciones = turno.Observaciones };
+    });
+    private Task GuardarAsync() => EjecutarAsync(async () =>
+    {
+        var datos = editor!;
+        var inicio = HorarioApi(datos.Inicio!.Value); var fin = HorarioApi(datos.Fin!.Value);
+        if (turnoEditado is null)
+            await Sesion.EnviarAsync(HttpMethod.Post, Ruta, new GuardarProgramacionDto { IdBateria = datos.IdBateria, Inicio = inicio, Fin = fin, Observaciones = datos.Observaciones });
+        else
+            await Sesion.EnviarAsync(HttpMethod.Put, $"{Ruta}/{turnoEditado.IdProgramacion}", new EditarProgramacionDto { IdBateria = datos.IdBateria, Inicio = inicio, Fin = fin, Observaciones = datos.Observaciones, Version = turnoEditado.Version });
+        periodo = datos.Inicio.Value.ToString("yyyy-MM", CultureInfo.InvariantCulture);
+        CerrarEditor(); mensaje = "Turno guardado.";
+        await LeerAsync(periodo);
+    });
+    private Task CancelarAsync() => EjecutarAsync(async () =>
+    {
+        var turno = cancelando!;
+        await Sesion.EnviarAsync(HttpMethod.Post, $"{Ruta}/{turno.IdProgramacion}/cancelacion", new CancelarProgramacionDto { Version = turno.Version });
+        cancelando = null; mensaje = "Turno cancelado.";
+        await LeerAsync(consultado!);
+    });
+    private void CerrarEditor() { editor = null; turnoEditado = null; }
+    private async Task EjecutarAsync(Func<Task> accion)
+    {
+        if (ocupado) return;
+        ocupado = true; error = null; mensaje = null;
+        try { await accion(); }
+        catch (ErrorApi ex) { error = ex.Message; if (ex.Estado == 409) error += " Si el turno cambió, volvé al listado, actualizá y abrilo nuevamente."; if (ex.Estado == 401) await SesionVencida.InvokeAsync(); }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException) { error = "No se pudo confirmar la operación. Consultá nuevamente el mes antes de repetir un guardado."; }
+        finally { ocupado = false; }
+    }
+    private static DateTime? Local(DateTimeOffset? valor) => valor is null ? null : TimeZoneInfo.ConvertTime(valor.Value, Zona).DateTime;
+    private static string Fecha(DateTimeOffset? valor) => Local(valor)?.ToString("dd/MM/yyyy HH:mm", Cultura) ?? "Sin fecha";
+    public static string HorarioApi(DateTime fecha)
+    {
+        var local = DateTime.SpecifyKind(fecha, DateTimeKind.Unspecified);
+        return new DateTimeOffset(local, Zona.GetUtcOffset(local)).ToString("yyyy-MM-dd'T'HH:mm:sszzz", CultureInfo.InvariantCulture);
+    }
+    public sealed class EntradaTurno : IValidatableObject
+    {
+        [Required(ErrorMessage = "Seleccioná una batería."), Range(1, int.MaxValue)] public int? IdBateria { get; set; }
+        [Required(ErrorMessage = "Ingresá el inicio.")] public DateTime? Inicio { get; set; }
+        [Required(ErrorMessage = "Ingresá el fin.")] public DateTime? Fin { get; set; }
+        [StringLength(255)] public string? Observaciones { get; set; }
+        public IEnumerable<ValidationResult> Validate(ValidationContext context)
+        {
+            if (Inicio is not null && Fin is not null && Fin <= Inicio) yield return new("El fin debe ser posterior al inicio.", [nameof(Fin)]);
+        }
+    }
+}

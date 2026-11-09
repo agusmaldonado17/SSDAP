@@ -1,0 +1,52 @@
+@using SSDAP.Shared.DTOs.Reportes
+@inherits PanelMovil
+<h1>Resultados mensuales</h1>
+<EstadoMovil Error="@Error" Ocupado="Ocupado" />
+@if(detalle is null)
+{
+    <label class="search-field"><span class="sr-only">Buscar revisiones</span><input type="search" @bind="busqueda" @bind:event="oninput" placeholder="Buscar mes, año o revisión…" /></label>
+    @foreach(var item in Filtrados) { <button class="card list-link" disabled="@Ocupado" @onclick="() => AbrirAsync(item.IdResultado)"><strong>@(new DateTime(item.Anio,item.Mes,1).ToString("MMMM yyyy",Cultura))</strong><span class="muted">Revisión @item.Revision · @item.FechaGeneracion.ToString("dd/MM/yyyy")</span>@if(!string.IsNullOrWhiteSpace(item.Observaciones)) { <span class="muted">@item.Observaciones</span> }</button> }
+    @if(!Ocupado && Error is null && !Filtrados.Any()) { <p>@(resultados.Count == 0 ? "No hay revisiones guardadas." : "No hay revisiones que coincidan con la búsqueda.")</p> }
+
+}
+else
+{
+    <button @onclick="() => detalle=null">← Volver a revisiones</button>
+    <h2>@detalle.Resultado.Anio-@detalle.Resultado.Mes.ToString("00") · Revisión @detalle.Resultado.Revision</h2>
+    @if(detalle.Reporte is { } r)
+    {
+        <article class="card"><h2>Producción estimada</h2><strong class="production-total">@Presentacion.Numero(r.VolumenTotalEstimadoM3) <small>m³</small></strong><div class="measurement"><span>Pozos</span><strong>@Presentacion.Numero(r.VolumenPozosM3) m³</strong></div><div class="measurement"><span>Acueductos</span><strong>@Presentacion.Numero(r.VolumenAcueductosM3) m³</strong></div><p class="muted">Caudal promedio: @Presentacion.Numero(r.CaudalPromedioPeriodoM3H) m³/h</p></article>
+        <details><summary>Detalle de producción</summary>
+        @foreach(var p in r.Pozos) { <p>Pozo #@p.IdPozo · @Presentacion.Numero(p.HorasProgramadas) h · @Presentacion.Numero(p.VolumenEstimadoM3) m³</p> }
+        @foreach(var a in r.Acueductos) { <p>@a.Nombre · @Presentacion.Numero(a.VolumenEstimadoM3) m³</p> }
+        </details>
+        <details><summary>Cloro medido</summary>
+        @if(r.Cloro.Count==0) { <p>Sin mediciones.</p> }
+        @foreach(var c in r.Cloro) { <p>@c.TipoCloro · @c.CantidadMediciones mediciones · @Presentacion.Numero(c.MinimoMgL)–@Presentacion.Numero(c.MaximoMgL) mg/L</p> }
+        </details>
+        <details><summary>Alcance de la estimación</summary>@foreach(var nota in r.Advertencias) { <p>@nota</p> }</details>
+    }
+    else { <p>Esta revisión antigua no contiene el detalle de producción actual.</p> }
+    @if(detalle.Calidad is { } calidad)
+    {
+        <h2>Calidad de la mezcla</h2><p><span class="state-badge" data-state="@calidad.Estado">@Presentacion.Estado(calidad.Estado)</span></p>
+        @foreach(var p in calidad.Parametros) { <article class="card parameter-card"><strong>@Presentacion.Parametro(p.Codigo)</strong><div class="parameter-value"><b>@Presentacion.Numero(p.Valor,"Sin resultado") <small>@p.Unidad</small></b><span class="state-badge" data-state="@p.EstadoEvaluacion">@Presentacion.Estado(p.EstadoEvaluacion)</span></div>@if(p.Valor is null) { <p class="muted">@Presentacion.Estado(p.EstadoCalculo)</p> }</article> }
+    }
+    else { <p>Sin captura de calidad para esta revisión.</p> }
+}
+@code {
+    private string busqueda = "";
+    private static readonly System.Globalization.CultureInfo Cultura = System.Globalization.CultureInfo.GetCultureInfo("es-AR");
+    private List<ResultadoMensualResumenDto> resultados = [];
+    private ResultadoMensualDetalleDto? detalle;
+    private IEnumerable<ResultadoMensualResumenDto> Filtrados => resultados.Where(item =>
+        string.IsNullOrWhiteSpace(busqueda) || Cultura.CompareInfo.IndexOf(
+            $"{new DateTime(item.Anio, item.Mes, 1).ToString("MM/yyyy yyyy-MM MMMM yyyy", Cultura)} Revisión {item.Revision} #{item.IdResultado} {item.Observaciones}",
+            busqueda.Trim(), System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0);
+    protected override Task OnInitializedAsync() => CargarAsync();
+    private Task CargarAsync() => EjecutarAsync(async () => {
+        var nuevos = await Sesion.TodasAsync<ResultadoMensualResumenDto>($"{Ruta}/resultados-mensuales");
+        resultados = nuevos;
+    });
+    private Task AbrirAsync(int id)=>EjecutarAsync(async()=>{detalle=await Sesion.ObtenerAsync<ResultadoMensualDetalleDto>($"{Ruta}/resultados-mensuales/{id}");});
+}

@@ -1,0 +1,75 @@
+@using SSDAP.Shared.DTOs.Fuentes
+@using SSDAP.Shared.DTOs.Reportes
+@using SSDAP.Web.Services
+@inherits PanelLocalidadBase
+<div class="monthly-report">
+<span class="eyebrow">@Localidad.Nombre</span><h1>Reporte mensual</h1>
+<p class="muted">Elegí el período, consultá la producción y calculá la calidad de la mezcla.</p>
+<EstadoOperacion Error="@Error" Mensaje="@Mensaje" Ocupado="Ocupado" />
+<fieldset class="report-setup" disabled="@Ocupado"><label for="reporte-mes">Período</label><input id="reporte-mes" type="month" value="@periodo" @onchange="CambiarPeriodo" />
+<h3>Acueductos incluidos</h3>
+@foreach (var fuente in fuentes.Where(f => f.TipoFuente == "Acueducto" && f.Estado == "Activa"))
+{ <label class="check-label"><input type="checkbox" checked="@acueductos.Contains(fuente.IdFuente)" @onchange="e => Seleccionar(fuente.IdFuente, e.Value is true)" /> @fuente.Nombre · @Presentacion.Numero(fuente.CaudalM3H) m³/h</label> }
+<button class="action-primary" @onclick="ConsultarAsync">Consultar producción</button></fieldset>
+@if (produccion is not null)
+{
+    <ResumenProduccion Datos="produccion" />
+    <h2>Calidad de la mezcla mensual</h2><p>Elegí un análisis por aporte. Los volúmenes de los pozos provienen del calendario de baterías.</p>
+    <SelectorAnalisis @ref="selector" Localidad="Localidad" Fuentes="fuentesCalidad" VolumenesMensuales="volumenesCalidad" Deshabilitado="Ocupado" Cambio="LimpiarCalidad" SesionVencida="SesionVencida" />
+    <button class="primary" disabled="@Ocupado" @onclick="CalcularCalidadAsync">Calcular calidad mensual</button>
+    @if (calidad is not null)
+    {
+        <div class="report-result-heading"><div><span class="eyebrow">Resultado de calidad</span>
+        <span class="evaluation-badge" data-state="@calidad.Estado">@Presentacion.Estado(calidad.Estado)</span></div>
+        <DescargarReporte Localidad="Localidad.Nombre" Produccion="produccion" Calidad="calidad" /></div>
+        <TablaMezcla Parametros="calidad.Parametros" NombresFuentes="calidad.Aportes.ToDictionary(f => f.IdFuente, f => f.Nombre)" />
+        <section class="report-save"><h3>Guardar resultado</h3>
+        <label for="reporte-notas">Observaciones de la revisión</label><textarea id="reporte-notas" maxlength="255" @bind="observaciones" disabled="@Ocupado"></textarea>
+        <p class="muted">Se guardará una nueva revisión del período.</p>
+        <button class="action-primary" disabled="@(Ocupado || guardado)" @onclick="GuardarAsync">@(guardado ? "Revisión guardada" : "Guardar revisión mensual")</button></section>
+    }
+}
+</div>
+@code {
+    private string periodo = Presentacion.Ahora.ToString("yyyy-MM");
+    private List<FuenteResumenDto> fuentes = [], fuentesCalidad = [];
+    private IReadOnlyDictionary<int, decimal> volumenesCalidad = new Dictionary<int, decimal>();
+    private HashSet<int> acueductos = [];
+    private ProduccionMensualDto? produccion;
+    private CalidadMensualDto? calidad;
+    private ConsultarProduccionMensualDto? consulta;
+    private SelectorAnalisis? selector;
+    private SeleccionCalidadMensualDto? seleccionCalculada;
+    private string? observaciones;
+    private bool guardado;
+    protected override Task OnInitializedAsync() => EjecutarAsync(async () => fuentes = await LeerPaginasAsync<FuenteResumenDto>($"{RutaLocalidad}/fuentes"));
+    private void LimpiarCalidad() { calidad = null; seleccionCalculada = null; guardado = false; }
+    private void Limpiar() { produccion = null; consulta = null; LimpiarCalidad(); }
+    private void CambiarPeriodo(ChangeEventArgs e) { periodo = e.Value?.ToString() ?? ""; Limpiar(); }
+    private void Seleccionar(int id, bool incluir) { if (incluir) acueductos.Add(id); else acueductos.Remove(id); Limpiar(); }
+    private Task ConsultarAsync() => EjecutarAsync(async () =>
+    {
+        Limpiar(); var fecha = Presentacion.Mes(periodo);
+        var solicitud = new ConsultarProduccionMensualDto { Anio = fecha.Year, Mes = fecha.Month, IdFuentesAcueducto = acueductos.ToList() };
+        var calculo = await Sesion.ConsultarAsync<ConsultarProduccionMensualDto, ProduccionMensualDto>($"{RutaLocalidad}/reportes/produccion-mensual", solicitud);
+        var inicial = await Sesion.ConsultarAsync<ConsultarCalidadMensualDto, CalidadMensualDto>($"{RutaLocalidad}/reportes/calidad-mensual", new() { Produccion = solicitud });
+        var ids = inicial.Aportes.Where(a => a.VolumenM3 > 0).Select(a => a.IdFuente).ToHashSet();
+        volumenesCalidad = inicial.Aportes.ToDictionary(a => a.IdFuente, a => a.VolumenM3);
+        fuentesCalidad = fuentes.Where(f => ids.Contains(f.IdFuente)).ToList();
+        produccion = calculo; consulta = solicitud;
+    });
+    private Task CalcularCalidadAsync() => EjecutarAsync(async () =>
+    {
+        LimpiarCalidad();
+        var seleccion = new SeleccionCalidadMensualDto { Analisis = selector!.Seleccion() };
+        calidad = await Sesion.ConsultarAsync<ConsultarCalidadMensualDto, CalidadMensualDto>($"{RutaLocalidad}/reportes/calidad-mensual", new() { Produccion = consulta!, Calidad = seleccion });
+        seleccionCalculada = seleccion;
+    });
+    private Task GuardarAsync() => EjecutarAsync(async () =>
+    {
+        if (guardado || consulta is null || seleccionCalculada is null) return;
+        var resultado = await Sesion.ConsultarAsync<GuardarResultadoMensualDto, ResultadoMensualDetalleDto>($"{RutaLocalidad}/resultados-mensuales", new() { Produccion = consulta, Calidad = seleccionCalculada, Observaciones = observaciones });
+        guardado = true; Mensaje = $"Revisión {resultado.Resultado.Revision} guardada (registro #{resultado.Resultado.IdResultado}).";
+        produccion = resultado.Reporte; calidad = resultado.Calidad;
+    });
+}

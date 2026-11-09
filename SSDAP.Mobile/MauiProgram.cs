@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;
+using SSDAP.Mobile.Services;
 
 namespace SSDAP.Mobile
 {
@@ -15,6 +16,10 @@ namespace SSDAP.Mobile
                 });
 
             builder.Services.AddMauiBlazorWebView();
+            builder.Services.AddSingleton<AlmacenMovil, AlmacenDispositivo>();
+            builder.Services.AddSingleton(new HttpClient { Timeout = TimeSpan.FromSeconds(30) });
+            builder.Services.AddSingleton<SesionMovil>();
+            builder.Services.AddSingleton<NavegadorExterno, NavegadorDispositivo>();
 
 #if DEBUG
     		builder.Services.AddBlazorWebViewDeveloperTools();

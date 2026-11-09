@@ -1,0 +1,38 @@
+@using SSDAP.Shared.DTOs.Fuentes
+@using SSDAP.Shared.DTOs.Simulaciones
+@using SSDAP.Web.Services
+@inherits PanelLocalidadBase
+<span class="eyebrow">@Localidad.Nombre</span><h1>Simulación de mezcla</h1>
+<p class="muted">Elegí las fuentes activas y un análisis por fuente. Se usan sus caudales actuales; el cálculo no guarda un resultado mensual.</p>
+<EstadoOperacion Error="@Error" Mensaje="@Mensaje" Ocupado="Ocupado" />
+@if (fuentes.Count == 0 && !Ocupado) { <div class="empty">No hay fuentes activas disponibles.</div> }
+<SelectorAnalisis @ref="selector" Localidad="Localidad" Fuentes="fuentes" Deshabilitado="Ocupado" Cambio="LimpiarResultado" SesionVencida="SesionVencida" />
+<button class="action-primary" disabled="@(Ocupado || fuentes.Count == 0)" @onclick="SimularAsync">Calcular mezcla</button>
+@if (resultado is not null)
+{
+    <h2>Resultado de la simulación</h2>
+    <div class="summary-volume">Caudal total: <strong>@Presentacion.Numero(resultado.CaudalTotalM3H) m³/h</strong> · Calculado: @Presentacion.Fecha(resultado.CalculadoEnUtc)</div>
+    <p class="muted">Comparación de la mezcla estimada con los límites configurados.</p>
+    <NotasCalculo Advertencias="resultado.Advertencias" Modelo="@resultado.Modelo" />
+    <details><summary>Fuentes y análisis utilizados</summary><ul>@foreach (var fuente in resultado.Fuentes) { <li>@fuente.Nombre · @Presentacion.Numero(fuente.CaudalM3H) m³/h · Análisis #@fuente.Analisis.IdAnalisis del @fuente.Analisis.Fecha.ToString("dd/MM/yyyy")</li> }</ul></details>
+    <TablaMezcla Parametros="resultado.Parametros" NombresFuentes="resultado.Fuentes.ToDictionary(f => f.IdFuente, f => f.Nombre)" />
+}
+@code {
+    private List<FuenteResumenDto> fuentes = [];
+    private SelectorAnalisis? selector;
+    private SimulacionMezclaDto? resultado;
+    protected override Task OnInitializedAsync() => CargarAsync();
+    private void LimpiarResultado() { resultado = null; Error = null; }
+    private Task CargarAsync() => EjecutarAsync(async () =>
+    {
+        resultado = null; fuentes = [];
+        fuentes = await LeerPaginasAsync<FuenteResumenDto>($"{RutaLocalidad}/fuentes?estado=Activa");
+    });
+    private Task SimularAsync() => EjecutarAsync(async () =>
+    {
+        resultado = null;
+        var seleccion = selector!.Seleccion();
+        if (seleccion.Count is < 1 or > 100) throw new ErrorApi(400, "Seleccioná entre 1 y 100 fuentes con sus análisis.");
+        resultado = await Sesion.ConsultarAsync<SimularMezclaDto, SimulacionMezclaDto>($"{RutaLocalidad}/simulaciones/mezcla", new() { Fuentes = seleccion });
+    });
+}

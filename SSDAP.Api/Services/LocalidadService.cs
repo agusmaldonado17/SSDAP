@@ -26,4 +26,17 @@ public sealed class LocalidadService(AppDbContext db)
         await db.SaveChangesAsync(ct);
         return new(l.IdLocalidad, l.Nombre, l.Provincia, l.Estado);
     }
+
+    public async Task<LocalidadDto> ActualizarAsync(int id, ActualizarLocalidadDto datos, CancellationToken ct)
+    {
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        var localidad = (await db.Localidades.FromSqlInterpolated($"SELECT * FROM localidad WHERE id_localidad = {id} FOR UPDATE")
+            .ToListAsync(ct)).SingleOrDefault() ?? throw new ReglaNegocioException(404, "Localidad no encontrada.");
+        localidad.Nombre = datos.Nombre.Trim();
+        localidad.Provincia = datos.Provincia.Trim();
+        localidad.Estado = datos.Estado;
+        await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+        return new(localidad.IdLocalidad, localidad.Nombre, localidad.Provincia, localidad.Estado);
+    }
 }

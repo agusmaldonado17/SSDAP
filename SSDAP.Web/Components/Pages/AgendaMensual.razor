@@ -1,0 +1,47 @@
+@using System.Globalization
+@using SSDAP.Shared.DTOs.Calendario
+<div class="calendar-scroll" tabindex="0" aria-label="Calendario mensual de baterías">
+<div class="month-calendar">
+    @foreach (var nombre in new[] { "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom" })
+    { <div class="calendar-heading">@nombre</div> }
+    @for (var i = 0; i < ((int)PrimerDia.DayOfWeek + 6) % 7; i++)
+    { <div class="calendar-blank" aria-hidden="true"></div> }
+    @for (var n = 1; n <= DateTime.DaysInMonth(PrimerDia.Year, PrimerDia.Month); n++)
+    {
+        var dia = PrimerDia.AddDays(n - 1);
+        var eventos = Turnos.Select(t => Recortar(t, dia)).Where(t => t is not null).Select(t => t!).OrderBy(t => t.Inicio).ThenBy(t => t.Turno.IdBateria).ToList();
+        <section class="calendar-day" aria-label="@dia.ToString("dd/MM/yyyy")">
+            <strong class="calendar-number">@n</strong>
+            @foreach (var evento in eventos)
+            {
+                <button type="button" disabled="@Ocupado" class="calendar-event battery-color-@(evento.Turno.IdBateria % 5) @(evento.Turno.Estado == "Cancelada" ? "calendar-cancelled" : "")" @onclick="() => Seleccionar.InvokeAsync(evento.Turno)">
+                    <strong>@evento.Turno.NombreBateria</strong>
+                    <span>@evento.Horario</span>
+                    @if (evento.Turno.Estado != "Programada") { <small>@evento.Turno.Estado</small> }
+                </button>
+            }
+        </section>
+    }
+</div>
+</div>
+@code {
+    [Parameter, EditorRequired] public DateTime PrimerDia { get; set; }
+    [Parameter, EditorRequired] public IReadOnlyList<ProgramacionDto> Turnos { get; set; } = [];
+    [Parameter] public bool Ocupado { get; set; }
+    [Parameter] public EventCallback<ProgramacionDto> Seleccionar { get; set; }
+    private static readonly TimeZoneInfo Zona = TimeZoneInfo.FindSystemTimeZoneById("America/Argentina/Buenos_Aires");
+    public sealed record Segmento(ProgramacionDto Turno, DateTime Inicio, DateTime Fin, string Horario);
+    public static Segmento? Recortar(ProgramacionDto turno, DateTime dia)
+    {
+        if (turno.Inicio is null || turno.Fin is null) return null;
+        var inicio = TimeZoneInfo.ConvertTime(turno.Inicio.Value, Zona).DateTime;
+        var fin = TimeZoneInfo.ConvertTime(turno.Fin.Value, Zona).DateTime;
+        var desde = dia.Date; var hasta = desde.AddDays(1);
+        if (inicio >= hasta || fin <= desde || fin <= inicio) return null;
+        inicio = inicio < desde ? desde : inicio;
+        fin = fin > hasta ? hasta : fin;
+        var horario = inicio == desde && fin == hasta ? "Todo el día · 24 h"
+            : $"{inicio.ToString("HH:mm", CultureInfo.InvariantCulture)}–{(fin == hasta ? "24:00" : fin.ToString("HH:mm", CultureInfo.InvariantCulture))}";
+        return new(turno, inicio, fin, horario);
+    }
+}

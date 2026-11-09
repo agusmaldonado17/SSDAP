@@ -1,0 +1,58 @@
+@using SSDAP.Shared.DTOs.Reportes
+@using SSDAP.Web.Services
+@inherits PanelLocalidadBase
+<span class="eyebrow">@Localidad.Nombre</span><h1>Revisiones mensuales</h1>
+<p class="muted">Resultados guardados, sin recalcular con los datos actuales.</p>
+<EstadoOperacion Error="@Error" Mensaje="@Mensaje" Ocupado="Ocupado" />
+<div class="revision-search">
+    <label for="historial-buscar">Buscar revisiones</label>
+    <input id="historial-buscar" type="search" @bind="busqueda" @bind:event="oninput" placeholder="Período, revisión u observaciones" disabled="@Ocupado" />
+    <span class="muted">@Filtrados.Count de @registros.Count revisiones</span>
+</div>
+@if (Filtrados.Count == 0 && !Ocupado) { <p class="empty">@(registros.Count == 0 ? "Todavía no hay revisiones guardadas." : "No hay revisiones que coincidan con la búsqueda.")</p> }
+else if (Filtrados.Count > 0)
+{
+    <div class="table-wrap revision-table"><table><thead><tr><th>Período</th><th>Revisión</th><th>Fecha de guardado</th><th>Observaciones</th><th></th></tr></thead><tbody>
+    @foreach (var registro in Filtrados)
+    {
+        <tr><td><strong>@registro.Mes.ToString("00")/@registro.Anio</strong></td><td>@(registro.Revision?.ToString() ?? "Anterior") · #@registro.IdResultado</td><td>@registro.FechaGeneracion.ToString("dd/MM/yyyy")</td><td>@(registro.Observaciones ?? "—")</td><td><button class="row-action" disabled="@Ocupado" @onclick="() => VerAsync(registro.IdResultado)">Ver revisión</button></td></tr>
+    }
+    </tbody></table></div>
+}
+@if (detalle is not null)
+{
+    <div class="revision-detail-heading"><button class="row-action" @onclick="() => detalle = null">Cerrar detalle</button></div>
+    <h2>Registro #@detalle.Resultado.IdResultado · @detalle.Resultado.Mes.ToString("00")/@detalle.Resultado.Anio</h2>
+    <p>@detalle.Resultado.EstadoRegistro · @detalle.Resultado.Observaciones</p>
+    @if (detalle.Reporte is not null)
+    {
+        <DescargarReporte Localidad="Localidad.Nombre" Produccion="detalle.Reporte" Calidad="detalle.Calidad" Revision="detalle.Resultado" />
+        <ResumenProduccion Datos="detalle.Reporte" />
+    }
+    else { <p class="notice">Este registro anterior no incluye el reporte detallado de producción.</p> }
+    @if (detalle.Calidad is not null)
+    {
+        <h2>Calidad guardada · @Presentacion.Estado(detalle.Calidad.Estado)</h2>
+        <details><summary>Análisis y volúmenes utilizados</summary><ul>@foreach (var aporte in detalle.Calidad.Aportes) { <li>@aporte.Nombre · @Presentacion.Numero(aporte.VolumenM3) m³ · @(aporte.Analisis is null ? "Sin análisis" : $"Análisis #{aporte.Analisis.IdAnalisis} del {aporte.Analisis.Fecha:dd/MM/yyyy}")</li> }</ul></details>
+        <TablaMezcla Parametros="detalle.Calidad.Parametros" NombresFuentes="detalle.Calidad.Aportes.ToDictionary(f => f.IdFuente, f => f.Nombre)" />
+    }
+    else { <p>Esta revisión no contiene una simulación de calidad mensual.</p> }
+}
+@code {
+    private string busqueda = "";
+    private List<ResultadoMensualResumenDto> registros = [];
+    private ResultadoMensualDetalleDto? detalle;
+    private List<ResultadoMensualResumenDto> Filtrados => registros.Where(r =>
+        System.Globalization.CultureInfo.GetCultureInfo("es-AR").CompareInfo.IndexOf(
+            $"{r.Mes:00}/{r.Anio} {r.Anio}-{r.Mes:00} {new DateTime(r.Anio, r.Mes, 1).ToString("MMMM yyyy", Presentacion.Cultura)} Revisión {r.Revision} #{r.IdResultado} {r.Observaciones}",
+            busqueda.Trim(), System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0).ToList();
+    protected override Task OnInitializedAsync() => EjecutarAsync(async () =>
+    {
+        registros = await LeerPaginasAsync<ResultadoMensualResumenDto>($"{RutaLocalidad}/resultados-mensuales");
+    });
+    private Task VerAsync(int id) => EjecutarAsync(async () =>
+    {
+        detalle = null;
+        detalle = await Sesion.ObtenerAsync<ResultadoMensualDetalleDto>($"{RutaLocalidad}/resultados-mensuales/{id}");
+    });
+}

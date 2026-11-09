@@ -1,0 +1,75 @@
+@inject IJSRuntime JS
+@inject IConfiguration Configuracion
+@implements IAsyncDisposable
+<div class="map-picker">
+    <button type="button" disabled="@Deshabilitado" @onclick="Abrir">Seleccionar ubicación en el mapa</button>
+    @if (abierto)
+    {
+        <p>Acercá el mapa y tocá el punto donde está el pozo.</p>
+        <div @ref="contenedor" class="location-map" aria-label="Mapa para seleccionar ubicación del pozo"></div>
+        @if (error is not null) { <p role="alert">@error</p> }
+        @if (punto is not null) { <p>Latitud: @punto.Latitud · Longitud: @punto.Longitud</p> }
+        <button type="button" disabled="@(Deshabilitado || punto is null)" @onclick="ConfirmarAsync">Usar este punto</button>
+        <button type="button" disabled="@Deshabilitado" @onclick="CerrarAsync">Cerrar mapa</button>
+    }
+</div>
+@code {
+    [Parameter] public decimal? Latitud { get; set; }
+    [Parameter] public decimal? Longitud { get; set; }
+    [Parameter] public bool Deshabilitado { get; set; }
+    [Parameter] public EventCallback<Punto> Seleccionado { get; set; }
+    public sealed record Punto(decimal Latitud, decimal Longitud);
+    private bool abierto, iniciar, eliminado;
+    private string? error;
+    private Punto? punto;
+    private ElementReference contenedor;
+    private IJSObjectReference? modulo;
+    private DotNetObjectReference<SelectorUbicacion>? referencia;
+    private void Abrir() { if (Deshabilitado || abierto) return; abierto = iniciar = true; error = null; punto = null; }
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!iniciar) return;
+        iniciar = false;
+        if (string.IsNullOrWhiteSpace(Configuracion["GoogleMaps:ApiKey"]))
+        {
+            error = "Google Maps todavía no está configurado. Podés ingresar las coordenadas manualmente.";
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+        try
+        {
+            modulo ??= await JS.InvokeAsync<IJSObjectReference>("import", "./mapa.js");
+            if (eliminado) return;
+            referencia ??= DotNetObjectReference.Create(this);
+            await modulo.InvokeVoidAsync("crear", contenedor, referencia, Latitud, Longitud, Configuracion["GoogleMaps:ApiKey"]);
+        }
+        catch (Exception ex) when (ex is JSException or TaskCanceledException)
+        { error = "No se pudo cargar el mapa. Podés cerrar y volver a intentar, o ingresar las coordenadas manualmente."; await InvokeAsync(StateHasChanged); }
+    }
+    [JSInvokable] public async Task Elegir(decimal latitud, decimal longitud)
+    {
+        if (eliminado || !abierto || Deshabilitado || latitud is < -90 or > 90 || longitud is < -180 or > 180) return;
+        punto = new(decimal.Round(latitud, 7), decimal.Round(longitud, 7));
+        await InvokeAsync(StateHasChanged);
+    }
+    private async Task ConfirmarAsync()
+    {
+        if (Deshabilitado || punto is null) return;
+        await Seleccionado.InvokeAsync(punto); await CerrarAsync();
+    }
+    private async Task CerrarAsync()
+    {
+        if (modulo is not null) await modulo.InvokeVoidAsync("destruir", contenedor);
+        abierto = false; punto = null;
+    }
+    public async ValueTask DisposeAsync()
+    {
+        eliminado = true;
+        if (modulo is not null)
+        {
+            try { await modulo.InvokeVoidAsync("destruir", contenedor); await modulo.DisposeAsync(); }
+            catch (JSDisconnectedException) { }
+        }
+        referencia?.Dispose();
+    }
+}

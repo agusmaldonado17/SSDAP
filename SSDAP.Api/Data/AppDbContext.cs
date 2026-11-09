@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using SSDAP.Api.Models;
 
 namespace SSDAP.Api.Data
@@ -15,6 +15,7 @@ namespace SSDAP.Api.Data
         public DbSet<Rol> Roles { get; set; }
         public DbSet<ParametroLey> ParametrosLey { get; set; }
         public DbSet<Usuario> Usuarios { get; set; }
+        public DbSet<SesionUsuario> SesionesUsuario { get; set; }
         public DbSet<UsuarioLocalidad> UsuariosLocalidades { get; set; }
         public DbSet<FuenteAgua> FuentesAgua { get; set; }
         public DbSet<Pozo> Pozos { get; set; }
@@ -22,8 +23,10 @@ namespace SSDAP.Api.Data
         public DbSet<Bateria> Baterias { get; set; }
         public DbSet<BateriaPozo> BateriasPozos { get; set; }
         public DbSet<ProgramacionBateria> ProgramacionesBateria { get; set; }
+        public DbSet<ProgramacionPozo> ProgramacionesPozos { get; set; }
         public DbSet<AnalisisCalidad> AnalisisCalidad { get; set; }
         public DbSet<ResultadoMensual> ResultadosMensuales { get; set; }
+        public DbSet<MedicionCloro> MedicionesCloro { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

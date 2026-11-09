@@ -364,3 +364,22 @@ FodyWeavers.xsd
 
 # Documentacion local
 /docs/
+
+# Material local de trabajo
+/design-references/
+/SSDAP.Movil/
+/.codex/
+/.agents/
+/tests/
+
+# Configuración local y archivos de despliegue
+**/appsettings.Development.json
+**/appsettings.Local.json
+/SSDAP.Mobile/Resources/Raw/maps.local.json
+*.apk
+*.aab
+*.keystore
+*.jks
+.env
+.env.*
+!.env.example

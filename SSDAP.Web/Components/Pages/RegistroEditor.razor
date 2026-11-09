@@ -1,0 +1,126 @@
+@using System.ComponentModel.DataAnnotations
+@using SSDAP.Shared.DTOs.Fuentes
+@using SSDAP.Shared.DTOs.Baterias
+@using SSDAP.Web.Services
+@inject SesionWeb Sesion
+
+<section class="editor" aria-label="Formulario de registro">
+    <h3>@(Id is null ? "Crear" : "Editar") @Tipo.ToLowerInvariant()</h3>
+    @if (error is not null) { <div class="notice" role="alert">@error</div> }
+    @if (cargando) { <p role="status">Cargando datos…</p> }
+    else if (listo)
+    {
+        <EditForm Model="modelo" OnValidSubmit="GuardarAsync" FormName="registro">
+            <DataAnnotationsValidator /><ValidationSummary />
+            <fieldset disabled="@guardando">
+            <div class="form-grid">
+                <div><label for="registro-nombre">Nombre</label><InputText id="registro-nombre" @bind-Value="modelo.Nombre" maxlength="100" /></div>
+                <div><label for="registro-estado">Estado</label><InputSelect id="registro-estado" @bind-Value="modelo.Estado"><option value="Activa">Activa</option><option value="Inactiva">Inactiva</option><option value="Mantenimiento">Mantenimiento</option></InputSelect></div>
+                @if (Tipo != "Batería")
+                {
+                    <div><label for="registro-caudal">Caudal (m³/h)</label><InputNumber id="registro-caudal" @bind-Value="modelo.Caudal" min="0" step="0.01" /></div>
+                }
+                @if (Tipo == "Pozo")
+                {
+                    <div><label for="registro-codigo">Código del pozo</label><InputText id="registro-codigo" @bind-Value="modelo.Codigo" maxlength="50" /></div>
+                    <div><label for="registro-latitud">Latitud (grados decimales)</label><InputNumber id="registro-latitud" @bind-Value="modelo.Latitud" min="-90" max="90" step="0.0000001" /></div>
+                    <div><label for="registro-longitud">Longitud (grados decimales)</label><InputNumber id="registro-longitud" @bind-Value="modelo.Longitud" min="-180" max="180" step="0.0000001" /></div>
+                }
+            </div>
+            @if (Tipo == "Pozo")
+            { <SelectorUbicacion Latitud="modelo.Latitud" Longitud="modelo.Longitud" Deshabilitado="guardando" Seleccionado="ElegirUbicacion" /> }
+            <label for="registro-notas">@(Tipo == "Batería" ? "Descripción" : "Observaciones") (opcional)</label><InputTextArea id="registro-notas" @bind-Value="modelo.Notas" maxlength="255" />
+            @if (Tipo == "Acueducto") { <p class="small muted">Ingresá el caudal promedio constante que aporta a la localidad.</p> }
+            @if (Tipo == "Batería" && Id is null) { <p class="small muted">La batería se crea vacía. Luego podés asociarle sus pozos.</p> }
+            <div class="actions"><button class="primary" type="submit">@(guardando ? "Guardando…" : "Guardar")</button><button type="button" @onclick="Cancelar">Cancelar</button></div>
+            </fieldset>
+        </EditForm>
+    }
+    else { <button @onclick="Cancelar">Volver</button> }
+</section>
+
+@code {
+    [Parameter] public int LocalidadId { get; set; }
+    [Parameter] public int? Id { get; set; }
+    [Parameter, EditorRequired] public string Tipo { get; set; } = "Pozo";
+    [Parameter] public EventCallback Guardado { get; set; }
+    [Parameter] public EventCallback Cancelar { get; set; }
+    [Parameter] public EventCallback SesionVencida { get; set; }
+    private Entrada modelo = new();
+    private void ElegirUbicacion(SelectorUbicacion.Punto punto) { modelo.Latitud = punto.Latitud; modelo.Longitud = punto.Longitud; }
+    private bool cargando, guardando, listo;
+    private string? error;
+    protected override async Task OnInitializedAsync()
+    {
+        if (Tipo is not ("Pozo" or "Acueducto" or "Batería"))
+            throw new InvalidOperationException($"Tipo de registro no reconocido: {Tipo}");
+        modelo.Tipo = Tipo;
+        cargando = true;
+        try
+        {
+            if (Id is not null)
+            {
+                var ruta = $"api/localidades/{LocalidadId}";
+                if (Tipo == "Batería")
+                {
+                    var datos = await Sesion.ObtenerAsync<BateriaDto>($"{ruta}/baterias/{Id}");
+                    modelo.Nombre = datos.Bateria.Nombre; modelo.Estado = datos.Bateria.Estado; modelo.Notas = datos.Bateria.Descripcion;
+                }
+                else
+                {
+                    var datos = await Sesion.ObtenerAsync<FuenteDto>($"{ruta}/fuentes/{Id}");
+                    modelo.Nombre = datos.Fuente.Nombre; modelo.Estado = datos.Fuente.Estado;
+                    modelo.Caudal = datos.Fuente.CaudalM3H; modelo.Notas = datos.Fuente.Observaciones;
+                    modelo.Codigo = datos.Pozo?.Codigo; modelo.Latitud = datos.Pozo?.Latitud; modelo.Longitud = datos.Pozo?.Longitud;
+                }
+            }
+            listo = true;
+        }
+        catch (ErrorApi ex) { await ErrorAsync(ex); }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException) { error = "No se pudieron cargar los datos. Volvé a intentar."; }
+        finally { cargando = false; }
+    }
+    private async Task GuardarAsync()
+    {
+        if (guardando) return;
+        guardando = true; error = null;
+        try
+        {
+            var metodo = Id is null ? HttpMethod.Post : HttpMethod.Put;
+            var ruta = $"api/localidades/{LocalidadId}";
+            if (Tipo == "Batería")
+                await Sesion.EnviarAsync(metodo, $"{ruta}/baterias" + (Id is null ? "" : $"/{Id}"), new GuardarBateriaDto { Nombre = modelo.Nombre, Estado = modelo.Estado, Descripcion = modelo.Notas });
+            else if (Tipo == "Pozo")
+                await Sesion.EnviarAsync(metodo, $"{ruta}/fuentes/" + (Id is null ? "pozos" : $"{Id}/pozo"), new GuardarPozoDto { Nombre = modelo.Nombre, Estado = modelo.Estado, Observaciones = modelo.Notas, CaudalM3H = modelo.Caudal, Codigo = modelo.Codigo!, Latitud = modelo.Latitud, Longitud = modelo.Longitud });
+            else if (Tipo == "Acueducto")
+                await Sesion.EnviarAsync(metodo, $"{ruta}/fuentes/" + (Id is null ? "acueductos" : $"{Id}/acueducto"), new GuardarFuenteDto { Nombre = modelo.Nombre, Estado = modelo.Estado, Observaciones = modelo.Notas, CaudalM3H = modelo.Caudal });
+            await Guardado.InvokeAsync();
+        }
+        catch (ErrorApi ex) { await ErrorAsync(ex); }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException) { error = "No se pudo confirmar el guardado. Revisá el listado antes de volver a enviar para evitar duplicados."; }
+        finally { guardando = false; }
+    }
+    private async Task ErrorAsync(ErrorApi ex) { error = ex.Message; if (ex.Estado == 401) await SesionVencida.InvokeAsync(); }
+    public sealed class Entrada : IValidatableObject
+    {
+        public string Tipo { get; set; } = "Pozo";
+        [Required(ErrorMessage = "Ingresá un nombre."), StringLength(100)] public string Nombre { get; set; } = "";
+        public string Estado { get; set; } = "Activa";
+        public decimal? Caudal { get; set; }
+        [StringLength(50)] public string? Codigo { get; set; }
+        public decimal? Latitud { get; set; }
+        public decimal? Longitud { get; set; }
+        [StringLength(255)] public string? Notas { get; set; }
+        public IEnumerable<ValidationResult> Validate(ValidationContext context)
+        {
+            if (Tipo != "Batería" && (Caudal is null || Caudal < 0 || Caudal > 99999999.99m || decimal.Round(Caudal.Value, 2) != Caudal))
+                yield return new("Ingresá un caudal no negativo con hasta dos decimales.", [nameof(Caudal)]);
+            if (Tipo == "Pozo")
+            {
+                if (string.IsNullOrWhiteSpace(Codigo)) yield return new("Ingresá el código del pozo.", [nameof(Codigo)]);
+                if (Latitud is null || Latitud < -90 || Latitud > 90 || decimal.Round(Latitud.Value, 7) != Latitud) yield return new("Ingresá una latitud válida con hasta siete decimales.", [nameof(Latitud)]);
+                if (Longitud is null || Longitud < -180 || Longitud > 180 || decimal.Round(Longitud.Value, 7) != Longitud) yield return new("Ingresá una longitud válida con hasta siete decimales.", [nameof(Longitud)]);
+            }
+        }
+    }
+}

@@ -1,0 +1,24 @@
+<div class="side-locality"><small>LOCALIDAD ACTUAL</small><strong>@Nombre</strong></div>
+@foreach (var grupo in Grupos)
+{
+    <details class="menu-group" open="@grupo.Opciones.Any(o => o.Id == Vista)">
+        <summary>@grupo.Nombre</summary>
+        @foreach (var opcion in grupo.Opciones)
+        {
+            <button type="button" class="@(Vista == opcion.Id ? "selected" : "")" aria-current="@(Vista == opcion.Id ? "page" : null)" @onclick="() => VistaChanged.InvokeAsync(opcion.Id)">@opcion.Nombre</button>
+        }
+    </details>
+}
+@code {
+    [Parameter] public string Nombre { get; set; } = "";
+    [Parameter] public string Vista { get; set; } = "fuentes";
+    [Parameter] public EventCallback<string> VistaChanged { get; set; }
+    private sealed record Opcion(string Id, string Nombre);
+    private sealed record Grupo(string Nombre, Opcion[] Opciones);
+    private static readonly Grupo[] Grupos =
+    [
+        new("Operación", [new("fuentes", "Fuentes de agua"), new("mapa", "Mapa de pozos"), new("baterias", "Baterías de pozos"), new("calendario", "Calendario"), new("alertas", "Revisión operativa")]),
+        new("Calidad", [new("calidad", "Análisis del agua"), new("cloro", "Cloro medido"), new("simulacion", "Simulación de mezcla")]),
+        new("Resultados", [ new("reportes", "Reporte mensual"), new("historial", "Revisiones guardadas")])
+    ];
+}

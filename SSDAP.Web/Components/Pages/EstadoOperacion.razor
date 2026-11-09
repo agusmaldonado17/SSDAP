@@ -1,0 +1,8 @@
+@if (Error is not null) { <div class="notice" role="alert">@Error</div> }
+@if (Mensaje is not null) { <p class="success-message" role="status">@Mensaje</p> }
+@if (Ocupado) { <p role="status">Procesando…</p> }
+@code {
+    [Parameter] public string? Error { get; set; }
+    [Parameter] public string? Mensaje { get; set; }
+    [Parameter] public bool Ocupado { get; set; }
+}

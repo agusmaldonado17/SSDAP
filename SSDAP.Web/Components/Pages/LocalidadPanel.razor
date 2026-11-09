@@ -1,0 +1,93 @@
+@using SSDAP.Shared.DTOs.Localidades
+@using SSDAP.Shared.DTOs.Fuentes
+@using SSDAP.Shared.DTOs.Baterias
+@using SSDAP.Web.Services
+@inject SesionWeb Sesion
+
+<section>
+    <span class="eyebrow">@Localidad.Provincia · @Localidad.Estado</span>
+    <h1>@Localidad.Nombre</h1>
+    @if (editorTipo is not null)
+    {
+        <RegistroEditor @key="editorClave" LocalidadId="Localidad.IdLocalidad" Tipo="@editorTipo" Id="editorId" Guardado="GuardadoAsync" Cancelar="CerrarEditor" SesionVencida="SesionVencida" />
+    }
+    else if (asociacionesId is not null)
+    {
+        <PozosBateriaEditor LocalidadId="Localidad.IdLocalidad" BateriaId="asociacionesId.Value" Cerrar="CerrarAsociacionesAsync" SesionVencida="SesionVencida" />
+    }
+    else
+    {
+    <div class="toolbar"><p class="muted">@(baterias ? "Caudales actuales calculados a partir de los pozos asociados." : "Pozos y acueductos registrados en esta localidad.")</p></div>
+    <div class="source-actions">
+        @if (baterias) { <button @onclick='() => AbrirEditor("Batería", null)'>Nueva batería</button> }
+        else { <button @onclick='() => AbrirEditor("Pozo", null)'>Nuevo pozo</button> <button @onclick='() => AbrirEditor("Acueducto", null)'>Nuevo acueducto</button> }
+    </div>
+    @if (error is not null) { <div class="notice" role="alert">@error <button class="row-action" disabled="@cargando" @onclick="CargarAsync">Reintentar</button></div> }
+    @if (cargando) { <p role="status">Cargando información…</p> }
+    else if (Cantidad == 0) { <div class="empty">No hay registros en esta página.</div> }
+    else
+    {
+        <div class="table-wrap">
+            @if (baterias)
+            {
+                <table><caption>Baterías · caudales en m³/h</caption><thead><tr><th>Nombre</th><th>Estado</th><th>Pozos</th><th>Caudal total</th><th>Disponible</th><th>Acciones</th></tr></thead><tbody>
+                @foreach (var bateria in listaBaterias)
+                { <tr><td>@bateria.Nombre</td><td><span class="badge-state" data-state="@bateria.Estado">@bateria.Estado</span></td><td>@bateria.CantidadPozos</td><td>@Numero(bateria.CaudalTotalM3H)</td><td>@Numero(bateria.CaudalDisponibleM3H)</td><td><button class="row-action" @onclick='() => AbrirEditor("Batería", bateria.IdBateria)'>Editar</button> <button class="row-action" @onclick="() => asociacionesId = bateria.IdBateria">Pozos</button></td></tr> }
+                </tbody></table>
+            }
+            else
+            {
+                <table><caption>Fuentes · caudales en m³/h</caption><thead><tr><th>Nombre</th><th>Tipo</th><th>Estado</th><th>Caudal</th><th>Observaciones</th><th>Acciones</th></tr></thead><tbody>
+                @foreach (var fuente in fuentes)
+                { <tr><td>@fuente.Nombre</td><td>@fuente.TipoFuente</td><td><span class="badge-state" data-state="@fuente.Estado">@fuente.Estado</span></td><td>@Numero(fuente.CaudalM3H)</td><td>@(fuente.Observaciones ?? "—")</td><td><button class="row-action" @onclick="() => AbrirEditor(fuente.TipoFuente, fuente.IdFuente)">Editar</button></td></tr> }
+                </tbody></table>
+            }
+        </div>
+    }
+    <div class="pagination-bar"><button class="page-nav" disabled="@(cargando || pagina == 1)" @onclick="() => PaginarAsync(-1)">Anterior</button><span>Página @pagina</span><button class="page-nav" disabled="@(cargando || Cantidad < 50)" @onclick="() => PaginarAsync(1)">Siguiente</button></div>
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public LocalidadDto Localidad { get; set; } = default!;
+    [Parameter] public EventCallback SesionVencida { get; set; }
+    private List<FuenteResumenDto> fuentes = [];
+    private List<BateriaResumenDto> listaBaterias = [];
+    private bool baterias, cargando;
+    private int pagina = 1;
+    private string? error;
+    private string? editorTipo;
+    private int? editorId, asociacionesId;
+    private Guid editorClave;
+    private void AbrirEditor(string tipo, int? id) { editorTipo = tipo; editorId = id; editorClave = Guid.NewGuid(); }
+    private void CerrarEditor() { editorTipo = null; }
+    private async Task GuardadoAsync() { CerrarEditor(); await CargarAsync(); }
+    private async Task CerrarAsociacionesAsync() { asociacionesId = null; await CargarAsync(); }
+    private int Cantidad => baterias ? listaBaterias.Count : fuentes.Count;
+    [Parameter] public bool MostrarBaterias { get; set; }
+    private bool inicializado;
+    protected override async Task OnParametersSetAsync()
+    {
+        if (inicializado && baterias == MostrarBaterias) return;
+        inicializado = true;
+        baterias = MostrarBaterias;
+        editorTipo = null; asociacionesId = null; pagina = 1;
+        await CargarAsync();
+    }
+    private async Task PaginarAsync(int cambio) { pagina += cambio; await CargarAsync(); }
+    private async Task CargarAsync()
+    {
+        cargando = true; error = null; fuentes.Clear(); listaBaterias.Clear();
+        try
+        {
+            var ruta = $"api/localidades/{Localidad.IdLocalidad}";
+            if (baterias) listaBaterias = await Sesion.ObtenerAsync<List<BateriaResumenDto>>($"{ruta}/baterias?pagina={pagina}");
+            else fuentes = await Sesion.ObtenerAsync<List<FuenteResumenDto>>($"{ruta}/fuentes?pagina={pagina}");
+        }
+        catch (ErrorApi ex) { error = ex.Message; if (ex.Estado == 401) await SesionVencida.InvokeAsync(); }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        { error = "No se pudo consultar la información. Comprobá la conexión y presioná Reintentar."; }
+        finally { cargando = false; }
+    }
+    private static string Numero(decimal valor) => valor.ToString("N2", System.Globalization.CultureInfo.GetCultureInfo("es-AR"));
+}

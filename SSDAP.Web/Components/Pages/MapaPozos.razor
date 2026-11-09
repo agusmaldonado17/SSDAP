@@ -1,0 +1,48 @@
+@using SSDAP.Shared.DTOs.Fuentes
+@inject IJSRuntime JS
+@inject IConfiguration Configuracion
+@implements IAsyncDisposable
+<p class="small muted">Verde: activa · Gris: inactiva · Naranja: mantenimiento. Los puntos coincidentes se agrupan.</p>
+@if (invalidos > 0) { <p role="status">@invalidos pozo(s) sin coordenadas válidas; no se muestran en el mapa.</p> }
+@if (error is not null) { <p role="alert">@error</p> }
+<div @ref="contenedor" class="locality-map" aria-label="Mapa de pozos de la localidad"></div>
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<FuenteDto> Pozos { get; set; } = [];
+    private ElementReference contenedor;
+    private IJSObjectReference? modulo;
+    private string? error;
+    private bool eliminado;
+    private int invalidos;
+    public static bool TieneCoordenadas(FuenteDto fuente) => fuente.Fuente.TipoFuente == "Pozo" && fuente.Pozo is { Latitud: >= -90 and <= 90, Longitud: >= -180 and <= 180 };
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        var validos = Pozos.Where(TieneCoordenadas).ToList();
+        invalidos = Pozos.Count - validos.Count;
+        var clave = Configuracion["GoogleMaps:ApiKey"];
+        if (validos.Count == 0) error = "No hay coordenadas válidas para mostrar.";
+        else if (string.IsNullOrWhiteSpace(clave)) error = "Falta configurar Google Maps en la aplicación Web.";
+        else
+        {
+            try
+            {
+                modulo = await JS.InvokeAsync<IJSObjectReference>("import", "./mapa.js");
+                if (eliminado) { await modulo.DisposeAsync(); return; }
+                await modulo.InvokeVoidAsync("mostrarPozos", contenedor, validos.Select(f => new {
+                    codigo = f.Pozo!.Codigo, nombre = f.Fuente.Nombre, estado = f.Fuente.Estado,
+                    caudal = f.Fuente.CaudalM3H, latitud = f.Pozo.Latitud, longitud = f.Pozo.Longitud
+                }).ToArray(), clave);
+            }
+            catch (Exception ex) when (ex is JSException or TaskCanceledException)
+            { error = "No se pudo cargar Google Maps. Podés consultar las coordenadas en el listado y volver a intentar con Actualizar."; }
+        }
+        if (!eliminado) await InvokeAsync(StateHasChanged);
+    }
+    public async ValueTask DisposeAsync()
+    {
+        eliminado = true;
+        if (modulo is null) return;
+        try { await modulo.InvokeVoidAsync("destruir", contenedor); await modulo.DisposeAsync(); }
+        catch (JSDisconnectedException) { }
+    }
+}

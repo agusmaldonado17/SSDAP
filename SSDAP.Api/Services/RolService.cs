@@ -9,14 +9,9 @@ namespace SSDAP.Api.Services;
 
 public sealed class RolService(AppDbContext dbContext)
 {
-    public async Task<List<RolDto>> ListarAsync(bool? activo, CancellationToken cancellationToken)
+    public async Task<List<RolDto>> ListarAsync(CancellationToken cancellationToken)
     {
         var consulta = dbContext.Roles.AsNoTracking();
-
-        if (activo.HasValue)
-        {
-            consulta = consulta.Where(rol => rol.Activo == activo.Value);
-        }
 
         return await consulta
             .OrderBy(rol => rol.Nombre)

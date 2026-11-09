@@ -1,0 +1,75 @@
+@using SSDAP.Shared.DTOs.Fuentes
+@using SSDAP.Shared.DTOs.Calidad
+@using SSDAP.Shared.DTOs.Simulaciones
+@using SSDAP.Web.Services
+@inherits PanelLocalidadBase
+
+<EstadoOperacion Error="@Error" Ocupado="Ocupado" />
+<div class="selection-list analysis-selection">
+@foreach (var fila in filas)
+{
+    <div class="selection-row" @key="fila.Fuente.IdFuente">
+        <label class="check-label"><input type="checkbox" checked="@fila.Incluir" disabled="@(Deshabilitado || Ocupado)" @onchange="e => IncluirAsync(fila, e.Value is true)" /> <strong>@fila.Fuente.Nombre</strong> <span class="muted">@fila.Fuente.TipoFuente</span></label>
+        @if (VolumenesMensuales is not null)
+        {
+            var volumen = VolumenesMensuales.GetValueOrDefault(fila.Fuente.IdFuente);
+            var total = VolumenesMensuales.Values.Sum();
+            <p class="source-contribution"><strong>@Presentacion.Numero(volumen) m³ en el mes</strong> · @(total > 0 ? (volumen * 100m / total).ToString("0.##", Presentacion.Cultura) : "0") % de la mezcla · @(fila.Fuente.TipoFuente == "Pozo" ? "Según turnos de las baterías" : "Aporte continuo del acueducto")</p>
+        }
+        else
+        {
+            <p class="source-contribution">@Presentacion.Numero(fila.Fuente.CaudalM3H) m³/h</p>
+        }
+        
+        @if (fila.Incluir)
+        {
+            <label for="analisis-fuente-@fila.Fuente.IdFuente">Análisis a utilizar</label>
+            <select id="analisis-fuente-@fila.Fuente.IdFuente" value="@fila.AnalisisId" disabled="@(Deshabilitado || Ocupado)" @onchange="e => SeleccionarAsync(fila, e)">
+                <option value="0">Seleccioná un análisis</option>
+                @foreach (var analisis in fila.Analisis) { <option value="@analisis.IdAnalisis">@analisis.Fecha.ToString("dd/MM/yyyy") · Análisis #@analisis.IdAnalisis</option> }
+            </select>
+            @if (fila.Analisis.Count == 0 && !Ocupado) { <p class="muted">No hay análisis disponibles. Podés cargarlos en Calidad del agua.</p> }
+        }
+    </div>
+}
+</div>
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<FuenteResumenDto> Fuentes { get; set; } = [];
+    [Parameter] public IReadOnlyDictionary<int, decimal>? VolumenesMensuales { get; set; }
+    [Parameter] public bool Deshabilitado { get; set; }
+    [Parameter] public EventCallback Cambio { get; set; }
+    private IReadOnlyList<FuenteResumenDto>? anteriores;
+    private List<Fila> filas = [];
+    protected override void OnParametersSet()
+    {
+        if (ReferenceEquals(anteriores, Fuentes)) return;
+        anteriores = Fuentes;
+        filas = Fuentes.Select(f => new Fila { Fuente = f }).ToList();
+    }
+    public List<FuenteSimulacionSeleccionDto> Seleccion()
+    {
+        if (Ocupado) throw new ErrorApi(400, "Esperá a que terminen de cargar los análisis.");
+        if (filas.Any(f => f.Incluir && f.AnalisisId == 0)) throw new ErrorApi(400, "Elegí un análisis para cada fuente seleccionada.");
+        return filas.Where(f => f.Incluir).Select(f => new FuenteSimulacionSeleccionDto { IdFuente = f.Fuente.IdFuente, IdAnalisis = f.AnalisisId }).ToList();
+    }
+    private async Task IncluirAsync(Fila fila, bool valor)
+    {
+        fila.Incluir = valor; fila.AnalisisId = 0;
+        await Cambio.InvokeAsync();
+        if (valor) await EjecutarAsync(() => LeerAsync(fila));
+    }
+    private async Task SeleccionarAsync(Fila fila, ChangeEventArgs e)
+    { fila.AnalisisId = int.TryParse(e.Value?.ToString(), out var id) ? id : 0; await Cambio.InvokeAsync(); }
+    private async Task LeerAsync(Fila fila)
+    {
+        fila.Analisis = [];
+        fila.Analisis = await LeerPaginasAsync<AnalisisCalidadDto>($"{RutaLocalidad}/fuentes/{fila.Fuente.IdFuente}/analisis");
+    }
+    private sealed class Fila
+    {
+        public FuenteResumenDto Fuente { get; init; } = default!;
+        public bool Incluir { get; set; }
+        public int AnalisisId { get; set; }
+        public List<AnalisisCalidadDto> Analisis { get; set; } = [];
+    }
+}

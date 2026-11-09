@@ -1,0 +1,68 @@
+@using System.ComponentModel.DataAnnotations
+@using SSDAP.Shared.DTOs.Cloro
+@using SSDAP.Web.Services
+@inherits PanelLocalidadBase
+
+<span class="eyebrow">@Localidad.Nombre</span><h1>Cloro en la mezcla final</h1>
+<p class="muted">Registro de cloro medido en la mezcla final, expresado en mg/L.</p>
+<EstadoOperacion Error="@Error" Mensaje="@Mensaje" Ocupado="Ocupado" />
+@if (entrada is not null)
+{
+    <section class="editor"><h2>Nueva medición</h2>
+    <EditForm Model="entrada" OnValidSubmit="GuardarAsync" FormName="cloro"><DataAnnotationsValidator /><ValidationSummary />
+    <fieldset disabled="@Ocupado"><div class="form-grid">
+    <div><label for="cloro-fecha">Fecha y hora (Argentina)</label><InputDate id="cloro-fecha" Type="InputDateType.DateTimeLocal" @bind-Value="entrada.Fecha" /></div>
+    <div><label for="cloro-tipo">Tipo de cloro</label><InputSelect id="cloro-tipo" @bind-Value="entrada.Tipo"><option value="Libre">Libre</option><option value="Total">Total</option></InputSelect></div>
+    <div><label for="cloro-valor">Valor medido (mg/L)</label><InputNumber id="cloro-valor" @bind-Value="entrada.Valor" min="0" step="0.000001" /></div>
+    </div><label for="cloro-notas">Observaciones</label><InputTextArea id="cloro-notas" @bind-Value="entrada.Observaciones" maxlength="255" />
+    <div class="actions"><button type="submit" class="primary">Guardar medición</button><button type="button" @onclick="() => entrada = null">Volver sin guardar</button></div></fieldset></EditForm></section>
+}
+else
+{
+    <div class="period-filter"><div><label for="cloro-filtro">Tipo</label><select id="cloro-filtro" value="@filtro" @onchange="FiltrarAsync" disabled="@Ocupado"><option value="">Todos</option><option value="Libre">Libre</option><option value="Total">Total</option></select></div><button disabled="@Ocupado" @onclick="Nuevo">Nueva medición</button></div>
+    @if (mediciones.Count == 0 && !Ocupado) { <div class="empty">No hay mediciones en esta página.</div> }
+    else
+    {
+        <div class="table-wrap"><table><thead><tr><th>Fecha y hora</th><th>Tipo</th><th>Cloro (mg/L)</th><th>Observaciones</th></tr></thead><tbody>
+        @foreach (var item in mediciones) { <tr><td>@Presentacion.Fecha(item.FechaHoraUtc)</td><td>@(item.TipoCloro == "SinEspecificar" ? "Sin especificar" : item.TipoCloro)</td><td>@Presentacion.Numero(item.ValorMgL)</td><td>@(item.Observaciones ?? "—")</td></tr> }
+        </tbody></table></div>
+    }
+    <div class="pagination-bar"><button class="page-nav" disabled="@(Ocupado || pagina == 1)" @onclick="() => PaginarAsync(-1)">Anterior</button><span>Página @pagina</span><button class="page-nav" disabled="@(Ocupado || mediciones.Count < 50)" @onclick="() => PaginarAsync(1)">Siguiente</button></div>
+}
+@code {
+    private List<MedicionCloroDto> mediciones = [];
+    private Entrada? entrada;
+    private string filtro = "";
+    private int pagina = 1;
+    protected override Task OnInitializedAsync() => CargarAsync();
+    private Task CargarAsync() => EjecutarAsync(LeerAsync);
+    private async Task LeerAsync()
+    {
+        mediciones = [];
+        mediciones = await Sesion.ObtenerAsync<List<MedicionCloroDto>>($"{RutaLocalidad}/mediciones-cloro?pagina={pagina}" + (filtro == "" ? "" : $"&tipoCloro={filtro}"));
+    }
+    private Task FiltrarAsync(ChangeEventArgs e) { filtro = e.Value?.ToString() ?? ""; pagina = 1; return CargarAsync(); }
+    private Task PaginarAsync(int delta) { pagina += delta; return CargarAsync(); }
+    private void Nuevo() { entrada = new() { Fecha = Presentacion.Ahora }; Error = null; Mensaje = null; }
+    private Task GuardarAsync() => EjecutarAsync(async () =>
+    {
+        await Sesion.EnviarAsync(HttpMethod.Post, $"{RutaLocalidad}/mediciones-cloro", entrada!.Contrato());
+        entrada = null; pagina = 1; filtro = ""; Mensaje = "Medición guardada.";
+        await LeerAsync();
+    });
+    public sealed class Entrada : IValidatableObject
+    {
+        [Required(ErrorMessage = "Ingresá la fecha y hora.")] public DateTime? Fecha { get; set; }
+        [Required] public string Tipo { get; set; } = "Libre";
+        [Required(ErrorMessage = "Ingresá el valor medido.")] public decimal? Valor { get; set; }
+        [StringLength(255)] public string? Observaciones { get; set; }
+        public CrearMedicionCloroDto Contrato() => new() { FechaHora = Fecha is null ? "" : Presentacion.Instante(Fecha.Value), TipoCloro = Tipo, ValorMgL = Valor, Observaciones = Observaciones };
+        public IEnumerable<ValidationResult> Validate(ValidationContext context)
+        {
+            var errores = new List<ValidationResult>();
+            var contrato = Contrato();
+            Validator.TryValidateObject(contrato, new ValidationContext(contrato), errores, true);
+            return errores;
+        }
+    }
+}

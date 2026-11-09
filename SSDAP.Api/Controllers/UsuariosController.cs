@@ -35,4 +35,20 @@ public sealed class UsuariosController(UsuarioService service) : ControllerBase
         await service.AsignarLocalidadAsync(id, localidadId, false, ct);
         return NoContent();
     }
+
+    [HttpPut("{id:int}"), EndpointSummary("Edita datos, rol y estado del usuario; conserva un administrador activo.")]
+    public async Task<ActionResult<UsuarioDto>> Actualizar([Range(1, int.MaxValue)] int id, ActualizarUsuarioDto datos, CancellationToken ct)
+        => Ok(await service.ActualizarAsync(id, datos, ct));
+
+    [HttpPut("{id:int}/password"), EndpointSummary("Restablece la contraseña e invalida las sesiones anteriores (administrador).")]
+    public async Task<IActionResult> RestablecerPassword([Range(1, int.MaxValue)] int id, RestablecerPasswordDto datos, CancellationToken ct)
+    {
+        await service.CambiarPasswordAsync(id, datos.PasswordNueva, null, ct);
+        return NoContent();
+    }
+
+    [HttpGet("{id:int}/localidades"), EndpointSummary("Consulta las localidades asignadas al usuario.")]
+    public async Task<ActionResult<List<SSDAP.Shared.DTOs.Localidades.LocalidadDto>>> Localidades(
+        [Range(1, int.MaxValue)] int id, CancellationToken ct, [Range(1, 1000000)] int pagina = 1)
+        => Ok(await service.LocalidadesAsync(id, pagina, ct));
 }

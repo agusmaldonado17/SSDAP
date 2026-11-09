@@ -28,12 +28,14 @@ public sealed class JwtService
             throw new InvalidOperationException("Jwt:Key debe tener al menos 32 bytes.");
         Clave = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(clave));
     }
-    public (string Token, DateTimeOffset Expira) Emitir(Usuario usuario)
+    public (string Token, DateTimeOffset Expira) Emitir(Usuario usuario, SesionUsuario sesion)
     {
         var ahora = DateTimeOffset.UtcNow;
-        var expira = ahora.AddMinutes(30);
+        var expira = new DateTimeOffset(DateTime.SpecifyKind(sesion.ExpiraEnUtc, DateTimeKind.Utc));
         var token = new JwtSecurityToken(Emisor, Audiencia,
             [new Claim(JwtRegisteredClaimNames.Sub, usuario.IdUsuario.ToString()),
+             new Claim("sello", usuario.SelloSeguridad),
+             new Claim("sid", sesion.Id),
              new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
              new Claim(JwtRegisteredClaimNames.Iat, ahora.ToUnixTimeSeconds().ToString(), ClaimValueTypes.Integer64)],
             ahora.UtcDateTime, expira.UtcDateTime, new SigningCredentials(Clave, SecurityAlgorithms.HmacSha256));

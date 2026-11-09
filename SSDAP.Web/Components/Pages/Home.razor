@@ -1,7 +1,243 @@
-﻿@page "/"
+@page "/"
+@using Microsoft.AspNetCore.Components.Sections
+@using System.ComponentModel.DataAnnotations
+@using SSDAP.Shared.DTOs.Autenticacion
+@using SSDAP.Shared.DTOs.Localidades
+@using SSDAP.Shared.DTOs.Usuarios
+@using SSDAP.Web.Services
+@inject SesionWeb Sesion
+@inject IJSRuntime JS
+@implements IAsyncDisposable
 
-<PageTitle>Home</PageTitle>
+<PageTitle>SSDAP · Inicio</PageTitle>
+<SectionContent SectionName="navegacion">
+    @if (listo && Sesion.Vigente)
+    {
+        <nav class="side-menu" aria-label="Menú principal">
+            <button class="side-root @(seleccionada is null && !verUsuarios && !verCuenta && !verLimites ? "selected" : "")" disabled="@ocupado" @onclick="CambiarLocalidad">Localidades</button>
+            @if (administrador)
+            {
+                <button class="side-root @(verUsuarios ? "selected" : "")" aria-current="@(verUsuarios ? "page" : null)" disabled="@ocupado" @onclick="AbrirUsuarios">Usuarios</button>
+                <button class="side-root @(verLimites ? "selected" : "")" disabled="@ocupado" @onclick="AbrirLimites">Límites de calidad</button>
+            }
+            @if (seleccionada is not null && !verUsuarios && !verCuenta && !verLimites)
+            {
+                <SSDAP.Web.Components.Layout.MenuLocalidad Nombre="@seleccionada.Nombre" @bind-Vista="vista" />
+            }
+        </nav>
+    }
+</SectionContent>
+<SectionContent SectionName="cuenta">
+    @if (listo && Sesion.Vigente)
+    {
+        <MenuCuenta Nombre="@($"{Sesion.Actual!.Usuario.Nombre} {Sesion.Actual.Usuario.Apellido}")" Rol="@Sesion.Actual.Usuario.Rol" Ocupado="ocupado" CambiarPassword="AbrirCuenta" CerrarSesion="CerrarAsync" />
+    }
+</SectionContent>
+@if (!listo)
+{
+    <p role="status">Preparando tu espacio de trabajo…</p>
+}
+else
+{
+    @if (mensaje is not null) { <div class="notice" role="alert">@mensaje</div> }
+    @if (!Sesion.Vigente)
+    {
+        <section class="login-panel">
+            <span class="eyebrow">BIENVENIDO A SSDAP</span>
+            <h1>Ingresá a tu cuenta</h1>
+            <p class="muted">Accedé a la información de abastecimiento de tus localidades.</p>
+            <EditForm Model="credenciales" OnValidSubmit="IngresarAsync" FormName="ingreso">
+                <DataAnnotationsValidator />
+                <ValidationSummary />
+                <label for="email">Correo electrónico</label>
+                <InputText id="email" type="email" autocomplete="username" @bind-Value="credenciales.Email" />
+                <label for="password">Contraseña</label>
+                <InputText id="password" type="password" autocomplete="current-password" @bind-Value="credenciales.Password" />
+                <button class="primary" type="submit" disabled="@ocupado">@(ocupado ? "Ingresando…" : "Ingresar")</button>
+            </EditForm>
+        </section>
+    }
+    else
+    {
+        @if (verCuenta)
+        { <PasswordEditor Cancelar="CambiarLocalidad" SesionVencida="InvalidarAsync" Guardado="PasswordCambiadoAsync" /> }
+        else if (verLimites && administrador)
+        { <LimitesPanel SesionVencida="InvalidarAsync" /> }
+        else if (verUsuarios && administrador)
+        {
+            <UsuariosPanel SesionVencida="InvalidarAsync" />
+        }
+        else if (seleccionada is null)
+        {
+            <h1>Tus localidades</h1>
+            <p class="muted">Seleccioná una localidad para consultar sus fuentes y baterías.</p>
+            @if (ocupado) { <p role="status">Cargando localidades…</p> }
+            else if (localidades.Count == 0) { <div class="empty">No hay localidades disponibles. Si no tenés asignaciones, contactá al administrador.</div> }
+            @if (administrador)
+            {
+                <button class="action-primary" disabled="@ocupado" @onclick="() => AbrirLocalidad(null)">Nueva localidad</button>
+                @if (editandoLocalidad)
+                { <LocalidadEditor @key="localidadEdicion?.IdLocalidad ?? 0" Localidad="localidadEdicion" Guardado="LocalidadGuardadaAsync" Cancelar="() => editandoLocalidad = false" SesionVencida="InvalidarAsync" /> }
+            }
+            <div class="locality-grid">
+                @foreach (var localidad in localidades)
+                {
+                    <div class="locality-entry"><button class="locality-card" @onclick="() => SeleccionarLocalidad(localidad)"><span class="badge-state" data-state="@localidad.Estado">@localidad.Estado</span><strong>@localidad.Nombre</strong><span>@localidad.Provincia</span><span class="card-action">Ver localidad →</span></button>
+                    @if (administrador) { <button class="edit-locality" disabled="@ocupado" @onclick="() => AbrirLocalidad(localidad)">Editar localidad</button> }</div>
+                }
+            </div>
+        }
+        else
+        {
+            @if (vista == "calidad")
+            {
+                <CalidadPanel @key="seleccionada.IdLocalidad" Localidad="seleccionada" SesionVencida="InvalidarAsync" />
+            }
+            else if (vista == "mapa")
+            { <MapaLocalidadPanel @key="seleccionada.IdLocalidad" Localidad="seleccionada" SesionVencida="InvalidarAsync" /> }
+            else if (vista == "cloro")
+            { <CloroPanel @key="seleccionada.IdLocalidad" Localidad="seleccionada" SesionVencida="InvalidarAsync" /> }
+            else if (vista == "simulacion")
+            { <SimulacionPanel @key="seleccionada.IdLocalidad" Localidad="seleccionada" SesionVencida="InvalidarAsync" /> }
+            else if (vista == "reportes")
+            { <ReportesPanel @key="seleccionada.IdLocalidad" Localidad="seleccionada" SesionVencida="InvalidarAsync" /> }
+            else if (vista == "historial")
+            { <HistorialMensualPanel @key="seleccionada.IdLocalidad" Localidad="seleccionada" SesionVencida="InvalidarAsync" /> }
+            else if (vista == "calendario")
+            {
+                <CalendarioPanel @key="seleccionada.IdLocalidad" Localidad="seleccionada" SesionVencida="InvalidarAsync" />
+            }
+            else if (vista == "alertas")
+            { <AlertasPanel @key="seleccionada.IdLocalidad" Localidad="seleccionada" SesionVencida="InvalidarAsync" /> }
+            else
+            {
+                <LocalidadPanel @key="seleccionada.IdLocalidad" Localidad="seleccionada" MostrarBaterias='@(vista == "baterias")' SesionVencida="InvalidarAsync" />
+            }
+        }
+    }
+}
 
-<h1>Hello, world!</h1>
+@code {
+    private readonly Credenciales credenciales = new();
+    private bool listo, ocupado, administrador, editandoLocalidad, verUsuarios, verCuenta, verLimites;
+    private void AbrirCuenta() { CambiarLocalidad(); verCuenta = true; }
+    private void AbrirLimites() { CambiarLocalidad(); verLimites = true; }
+    private async Task PasswordCambiadoAsync() { await InvalidarAsync(); mensaje = "Contraseña actualizada. Ingresá con tu nueva contraseña."; }
+    private void AbrirUsuarios() { CambiarLocalidad(); verUsuarios = true; seleccionada = null; editandoLocalidad = false; }
+    private LocalidadDto? localidadEdicion;
+    private void AbrirLocalidad(LocalidadDto? localidad) { localidadEdicion = localidad; editandoLocalidad = true; }
+    private async Task LocalidadGuardadaAsync() { editandoLocalidad = false; await CargarLocalidadesAsync(); }
+    private string vista = "fuentes";
+    private void CambiarLocalidad() { verUsuarios = false; verCuenta = false; verLimites = false; seleccionada = null; vista = "fuentes"; editandoLocalidad = false; }
+    private void SeleccionarLocalidad(LocalidadDto localidad) { seleccionada = localidad; vista = "fuentes"; }
+    private string? mensaje;
+    private List<LocalidadDto> localidades = [];
+    private LocalidadDto? seleccionada;
+    private IJSObjectReference? modulo;
+    private DotNetObjectReference<Home>? referencia;
 
-Welcome to your new app.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        await EjecutarAsync(async () =>
+        {
+            await Sesion.RestaurarAsync();
+            if (Sesion.Vigente)
+            {
+                await Sesion.ObtenerAsync<UsuarioDto>("api/mi-cuenta");
+                await LeerLocalidadesAsync();
+            }
+        });
+        modulo = await JS.InvokeAsync<IJSObjectReference>("import", "./sesion.js");
+        referencia = DotNetObjectReference.Create(this);
+        await modulo.InvokeVoidAsync("iniciar", referencia);
+        listo = true;
+        StateHasChanged();
+    }
+
+    private Task IngresarAsync() => EjecutarAsync(async () =>
+    {
+        await Sesion.IngresarAsync(new LoginDto { Email = credenciales.Email, Password = credenciales.Password });
+        credenciales.Password = "";
+        await LeerLocalidadesAsync();
+    });
+
+    private Task CargarLocalidadesAsync() => EjecutarAsync(LeerLocalidadesAsync);
+    private async Task LeerLocalidadesAsync()
+    {
+        localidades.Clear(); administrador = false;
+        // La API decide el acceso global; no inferir permisos por el nombre editable del rol.
+        try { localidades = await LeerTodasLocalidadesAsync("api/localidades"); administrador = true; }
+        catch (ErrorApi ex) when (ex.Estado == 403)
+        { localidades = await LeerTodasLocalidadesAsync("api/mi-cuenta/localidades"); }
+    }
+    private async Task<List<LocalidadDto>> LeerTodasLocalidadesAsync(string ruta)
+    {
+        var todas = new List<LocalidadDto>();
+        for (var pagina = 1; ; pagina++)
+        {
+            var lote = await Sesion.ObtenerAsync<List<LocalidadDto>>($"{ruta}?pagina={pagina}");
+            todas.AddRange(lote);
+            if (lote.Count < 50) return todas;
+        }
+    }
+    private async Task CerrarAsync()
+    {
+        await EjecutarAsync(async () =>
+        {
+            try { await Sesion.CerrarAsync(); }
+            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or ErrorApi)
+            { mensaje = "Saliste de esta pestaña, pero no se pudo confirmar el cierre en el servidor. La sesión vencerá por inactividad."; }
+            seleccionada = null;
+            administrador = false; verUsuarios = false; verCuenta = false; verLimites = false; editandoLocalidad = false; localidadEdicion = null;
+            localidades.Clear();
+        });
+    }
+    private async Task EjecutarAsync(Func<Task> accion)
+    {
+        ocupado = true; mensaje = null;
+        try { await accion(); }
+        catch (ErrorApi ex) { mensaje = ex.Message; if (ex.Estado == 401) await InvalidarAsync(); }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        { mensaje = "No se pudo conectar con la API. Comprobá que esté iniciada y volvé a intentar."; }
+        finally { ocupado = false; }
+    }
+    private async Task InvalidarAsync()
+    {
+        await Sesion.LimpiarAsync(); seleccionada = null; localidades.Clear();
+        administrador = false; verUsuarios = false; verCuenta = false; verLimites = false; editandoLocalidad = false; localidadEdicion = null;
+        mensaje = "Tu sesión ya no es válida. Volvé a ingresar.";
+    }
+    [JSInvokable]
+    public async Task InformarActividad()
+    {
+        if (!Sesion.Vigente || ocupado) return;
+        try { await Sesion.ActividadAsync(); }
+        catch (ErrorApi ex) { if (ex.Estado == 401) await InvalidarAsync(); else mensaje = ex.Message; }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        { mensaje = "No se pudo renovar la sesión. Comprobá la conexión."; }
+        await InvokeAsync(StateHasChanged);
+    }
+    [JSInvokable]
+    public async Task ComprobarVencimiento()
+    {
+        if (Sesion.Actual is not null && !Sesion.Vigente)
+        { await InvalidarAsync(); await InvokeAsync(StateHasChanged); }
+    }
+    public async ValueTask DisposeAsync()
+    {
+        if (modulo is not null)
+        {
+            try { await modulo.InvokeVoidAsync("detener"); await modulo.DisposeAsync(); }
+            catch (JSDisconnectedException) { }
+        }
+        referencia?.Dispose();
+    }
+    private sealed class Credenciales
+    {
+        [Required(ErrorMessage = "Ingresá tu correo."), EmailAddress(ErrorMessage = "Ingresá un correo válido.")]
+        public string Email { get; set; } = "";
+        [Required(ErrorMessage = "Ingresá tu contraseña."), StringLength(128)]
+        public string Password { get; set; } = "";
+    }
+}

@@ -1,0 +1,85 @@
+@using SSDAP.Shared.DTOs.Baterias
+@using SSDAP.Shared.DTOs.Fuentes
+@using SSDAP.Web.Services
+@inject SesionWeb Sesion
+<section class="editor battery-wells-editor">
+    <div class="battery-wells-heading">
+        <div><span class="eyebrow">Composición de la batería</span><h2>Pozos de @detalle?.Bateria.Nombre</h2></div>
+        <button disabled="@ocupado" @onclick="Cerrar">Volver a baterías</button>
+    </div>
+    @if (error is not null) { <div class="notice" role="alert">@error <button class="row-action" disabled="@ocupado" @onclick="CargarAsync">Reintentar consulta</button></div> }
+    @if (ocupado) { <p class="small muted" role="status">Actualizando pozos…</p> }
+    <fieldset disabled="@ocupado">
+    @if (detalle is not null)
+    {
+        <div class="battery-wells-grid">
+            <section class="well-group" aria-labelledby="associated-wells-title">
+                <div class="well-group-heading"><h3 id="associated-wells-title">Pozos asociados</h3><span class="well-count">@detalle.Pozos.Count</span></div>
+                @if (detalle.Pozos.Count == 0) { <p class="well-group-empty">La batería todavía no tiene pozos asociados.</p> }
+                <ul class="well-list">
+                @foreach (var pozo in detalle.Pozos)
+                {
+                    <li class="well-item"><div class="well-description"><strong>@pozo.Nombre</strong><span class="badge-state" data-state="@pozo.Estado">@pozo.Estado</span></div><button class="row-action row-action-remove" aria-label="Retirar @pozo.Nombre" @onclick="() => RetirarAsync(pozo.IdPozo)">Retirar</button></li>
+                }
+                </ul>
+            </section>
+            <section class="well-group" aria-labelledby="available-wells-title">
+                <div class="well-group-heading"><h3 id="available-wells-title">Pozos disponibles</h3></div>
+                @if (!PozosDisponibles.Any()) { <p class="well-group-empty">No hay pozos pendientes de asociar en esta página.</p> }
+                <ul class="well-list">
+                @foreach (var fuente in PozosDisponibles)
+                {
+                    <li class="well-item"><div class="well-description"><strong>@fuente.Nombre</strong><span class="badge-state" data-state="@fuente.Estado">@fuente.Estado</span></div><button class="row-action" aria-label="Asociar @fuente.Nombre" @onclick="() => AsociarAsync(fuente.IdFuente)">Asociar</button></li>
+                }
+                </ul>
+                @if (pagina > 1 || disponibles.Count >= 50)
+                {
+                    <div class="pagination-bar"><button class="page-nav" disabled="@(pagina == 1)" @onclick="() => PaginarAsync(-1)">Anterior</button><span>Página @pagina</span><button class="page-nav" disabled="@(disponibles.Count < 50)" @onclick="() => PaginarAsync(1)">Siguiente</button></div>
+                }
+            </section>
+        </div>
+    }
+    </fieldset>
+</section>
+@code {
+    [Parameter] public int LocalidadId { get; set; }
+    [Parameter] public int BateriaId { get; set; }
+    [Parameter] public EventCallback Cerrar { get; set; }
+    [Parameter] public EventCallback SesionVencida { get; set; }
+    private BateriaDto? detalle;
+    private List<FuenteResumenDto> disponibles = [];
+    private IEnumerable<FuenteResumenDto> PozosDisponibles => disponibles.Where(f => detalle is not null && !detalle.Pozos.Any(p => p.IdFuente == f.IdFuente));
+    private bool ocupado;
+    private string? error;
+    private int pagina = 1;
+    private string Ruta => $"api/localidades/{LocalidadId}";
+    protected override Task OnInitializedAsync() => CargarAsync();
+    private Task CargarAsync() => EjecutarAsync(LeerAsync);
+    private async Task LeerAsync()
+    {
+        detalle = await Sesion.ObtenerAsync<BateriaDto>($"{Ruta}/baterias/{BateriaId}");
+        disponibles = await Sesion.ObtenerAsync<List<FuenteResumenDto>>($"{Ruta}/fuentes?tipo=Pozo&pagina={pagina}");
+    }
+    private async Task PaginarAsync(int cambio) { pagina += cambio; await CargarAsync(); }
+    private Task AsociarAsync(int fuenteId) => EjecutarAsync(async () =>
+    {
+        var fuente = await Sesion.ObtenerAsync<FuenteDto>($"{Ruta}/fuentes/{fuenteId}");
+        await Sesion.EnviarAsync(HttpMethod.Put, $"{Ruta}/baterias/{BateriaId}/pozos/{fuente.Pozo!.IdPozo}", new { });
+        await LeerAsync();
+    });
+    private Task RetirarAsync(int pozoId) => EjecutarAsync(async () =>
+    {
+        await Sesion.EnviarAsync(HttpMethod.Delete, $"{Ruta}/baterias/{BateriaId}/pozos/{pozoId}", new { });
+        await LeerAsync();
+    });
+    private async Task EjecutarAsync(Func<Task> accion)
+    {
+        if (ocupado) return;
+        ocupado = true; error = null;
+        try { await accion(); }
+        catch (ErrorApi ex) { error = ex.Message; if (ex.Estado == 401) await SesionVencida.InvokeAsync(); }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        { error = "No se pudo confirmar la operación. Reintentá la consulta para comprobar el resultado."; }
+        finally { ocupado = false; }
+    }
+}

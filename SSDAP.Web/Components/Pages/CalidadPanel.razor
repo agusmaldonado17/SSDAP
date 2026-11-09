@@ -1,0 +1,158 @@
+@using SSDAP.Shared.DTOs.Localidades
+@using SSDAP.Shared.DTOs.Fuentes
+@using SSDAP.Shared.DTOs.Calidad
+@using SSDAP.Web.Services
+@inject SesionWeb Sesion
+<span class="eyebrow">@Localidad.Nombre · @Localidad.Provincia</span>
+<h1>Calidad del agua</h1>
+<p class="muted">Análisis de pozos y acueductos. Cada registro conserva los resultados de una fecha.</p>
+@if (error is not null) { <div class="notice" role="alert">@error</div> }
+@if (mensaje is not null) { <p role="status">@mensaje</p> }
+@if (editor is not null)
+{
+    <section class="editor"><h2>@(editando is null ? "Nuevo análisis" : "Editar análisis") · @NombreFuente</h2>
+    <p class="muted">Las correcciones se usan en nuevas consultas; las revisiones mensuales guardadas conservan sus resultados.</p>
+    <p>Dejá vacíos los parámetros no medidos. Cero representa un resultado medido.</p>
+    <EditForm Model="editor" OnValidSubmit="GuardarAsync" FormName="analisis">
+    <DataAnnotationsValidator /><ValidationSummary />
+    <fieldset disabled="@ocupado">
+    <label for="analisis-fecha">Fecha del análisis</label><InputDate id="analisis-fecha" @bind-Value="editor.Fecha" />
+    <div class="form-grid">
+<div><label for="analisis-ResiduoSeco">Residuo seco (mg/L)</label><InputNumber id="analisis-ResiduoSeco" @bind-Value="editor.ResiduoSeco" min="0" step="0.000001" /></div>
+<div><label for="analisis-Cloruro">Cloruro (mg/L)</label><InputNumber id="analisis-Cloruro" @bind-Value="editor.Cloruro" min="0" step="0.000001" /></div>
+<div><label for="analisis-Sulfato">Sulfato (mg/L)</label><InputNumber id="analisis-Sulfato" @bind-Value="editor.Sulfato" min="0" step="0.000001" /></div>
+<div><label for="analisis-Carbonato">Carbonato (mg/L)</label><InputNumber id="analisis-Carbonato" @bind-Value="editor.Carbonato" min="0" step="0.000001" /></div>
+<div><label for="analisis-Bicarbonato">Bicarbonato (mg/L)</label><InputNumber id="analisis-Bicarbonato" @bind-Value="editor.Bicarbonato" min="0" step="0.000001" /></div>
+<div><label for="analisis-Calcio">Calcio (mg/L)</label><InputNumber id="analisis-Calcio" @bind-Value="editor.Calcio" min="0" step="0.000001" /></div>
+<div><label for="analisis-Magnesio">Magnesio (mg/L)</label><InputNumber id="analisis-Magnesio" @bind-Value="editor.Magnesio" min="0" step="0.000001" /></div>
+<div><label for="analisis-Hierro">Hierro (mg/L)</label><InputNumber id="analisis-Hierro" @bind-Value="editor.Hierro" min="0" step="0.000001" /></div>
+<div><label for="analisis-Nitrato">Nitrato (mg/L)</label><InputNumber id="analisis-Nitrato" @bind-Value="editor.Nitrato" min="0" step="0.000001" /></div>
+<div><label for="analisis-Nitrito">Nitrito (mg/L)</label><InputNumber id="analisis-Nitrito" @bind-Value="editor.Nitrito" min="0" step="0.000001" /></div>
+<div><label for="analisis-Amonio">Amonio (mg/L)</label><InputNumber id="analisis-Amonio" @bind-Value="editor.Amonio" min="0" step="0.000001" /></div>
+<div><label for="analisis-Fluor">Flúor (mg/L)</label><InputNumber id="analisis-Fluor" @bind-Value="editor.Fluor" min="0" step="0.000001" /></div>
+<div><label for="analisis-Arsenico">Arsénico (mg/L)</label><InputNumber id="analisis-Arsenico" @bind-Value="editor.Arsenico" min="0" step="0.000001" /></div>
+<div><label for="analisis-Sodio">Sodio (mg/L)</label><InputNumber id="analisis-Sodio" @bind-Value="editor.Sodio" min="0" step="0.000001" /></div>
+<div><label for="analisis-Potasio">Potasio (mg/L)</label><InputNumber id="analisis-Potasio" @bind-Value="editor.Potasio" min="0" step="0.000001" /></div>
+
+    </div>
+    <label for="analisis-notas">Observaciones (opcional)</label><InputTextArea id="analisis-notas" @bind-Value="editor.Observaciones" maxlength="255" />
+    <div class="actions"><button type="submit" class="primary">Guardar análisis</button><button type="button" @onclick="() => editor = null">Volver sin guardar</button></div>
+    </fieldset></EditForm></section>
+}
+else
+{
+    <div class="period-filter"><div><label for="calidad-fuente">Fuente de agua</label><select id="calidad-fuente" value="@fuenteId" @onchange="CambiarFuenteAsync" disabled="@ocupado"><option value="0">Seleccioná una fuente</option>
+    @foreach (var fuente in fuentes) { <option value="@fuente.IdFuente">@fuente.Nombre (@fuente.TipoFuente · @fuente.Estado)</option> }
+    </select></div>
+    @if (fuenteId > 0) { <button disabled="@ocupado" @onclick="Nuevo">Nuevo análisis</button> }
+    </div>
+    @if (ocupado) { <p role="status">Cargando…</p> }
+    @if (fuenteId > 0)
+    {
+        @if (analisis.Count == 0 && !ocupado) { <div class="empty">No hay análisis en esta página.</div> }
+        else
+        {
+            <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Resultados cargados</th><th>Observaciones</th><th>Acciones</th></tr></thead><tbody>
+            @foreach (var item in analisis)
+            { <tr><td>@item.Fecha.ToString("dd/MM/yyyy")</td><td>@EntradaAnalisis.Filas(item.Mediciones).Count(f => f.Valor.HasValue) / 19</td><td>@(item.Observaciones ?? "—")</td><td><button disabled="@ocupado" @onclick="() => VerAsync(item.IdAnalisis)">Ver resultados</button> <button disabled="@ocupado" @onclick="() => EditarAsync(item.IdAnalisis)">Editar</button></td></tr> }
+            </tbody></table></div>
+        }
+        <div class="pagination-bar"><button class="page-nav" disabled="@(ocupado || pagina == 1)" @onclick="() => PaginarAsync(-1)">Anterior</button><span>Página @pagina</span><button class="page-nav" disabled="@(ocupado || analisis.Count < 50)" @onclick="() => PaginarAsync(1)">Siguiente</button></div>
+    }
+    @if (detalle is not null)
+    {
+        <h2>Resultados del @detalle.Fecha.ToString("dd/MM/yyyy")</h2>
+        <p>@detalle.Observaciones</p>
+        <div class="table-wrap"><table><thead><tr><th>Parámetro</th><th>Valor</th><th>Unidad</th></tr></thead><tbody>
+        @foreach (var fila in EntradaAnalisis.Filas(detalle.Mediciones))
+        { <tr><td>@fila.Nombre</td><td>@(fila.Valor?.ToString("0.######", Cultura) ?? "No medido")</td><td>@fila.Unidad</td></tr> }
+        </tbody></table></div>
+        <button disabled="@ocupado" @onclick="EvaluarAsync">Comparar con límites configurados</button>
+        @if (evaluacion is not null)
+        {
+            <p class="report-observations">Comparación con la configuración actual: @evaluacion.DentroDeRango dentro de rango, @evaluacion.FueraDeRango fuera de rango y @evaluacion.NoEvaluados no evaluados. No certifica potabilidad.</p>
+            <div class="table-wrap"><table><thead><tr><th>Parámetro</th><th>Valor</th><th>Rango configurado</th><th>Resultado</th></tr></thead><tbody>
+            @foreach (var fila in evaluacion.Parametros)
+            { <tr><td>@Presentacion.Parametro(fila.Codigo) (@fila.Unidad)</td><td>@Numero(fila.Valor)</td><td>@(fila.Limite is null ? "Sin límite aplicable" : $"{Numero(fila.Limite.ValorMinimo)} a {Numero(fila.Limite.ValorMaximo)}")</td><td><span class="evaluation-badge" data-state="@fila.Estado">@Presentacion.Estado(fila.Estado)</span></td></tr> }
+            </tbody></table></div>
+        }
+    }
+}
+@code {
+    [Parameter, EditorRequired] public LocalidadDto Localidad { get; set; } = default!;
+    [Parameter] public EventCallback SesionVencida { get; set; }
+    private static readonly System.Globalization.CultureInfo Cultura = System.Globalization.CultureInfo.GetCultureInfo("es-AR");
+    private List<FuenteResumenDto> fuentes = [];
+    private List<AnalisisCalidadDto> analisis = [];
+    private AnalisisCalidadDto? detalle, editando;
+    private EvaluacionCalidadDto? evaluacion;
+    private EntradaAnalisis? editor;
+    private bool ocupado;
+    private string? error, mensaje;
+    private int fuenteId, pagina = 1;
+    private string Ruta => $"api/localidades/{Localidad.IdLocalidad}/fuentes/{fuenteId}/analisis";
+    private string NombreFuente => fuentes.FirstOrDefault(f => f.IdFuente == fuenteId)?.Nombre ?? "";
+    protected override Task OnInitializedAsync() => ActualizarAsync();
+    private Task ActualizarAsync() => EjecutarAsync(async () =>
+    {
+        fuentes = [];
+        for (var p = 1; ; p++)
+        {
+            var lote = await Sesion.ObtenerAsync<List<FuenteResumenDto>>($"api/localidades/{Localidad.IdLocalidad}/fuentes?pagina={p}");
+            fuentes.AddRange(lote); if (lote.Count < 50) break;
+        }
+        if (fuenteId > 0) await LeerAsync();
+    });
+    private Task CambiarFuenteAsync(ChangeEventArgs e)
+    {
+        fuenteId = int.TryParse(e.Value?.ToString(), out var id) ? id : 0;
+        pagina = 1; analisis = []; detalle = null; evaluacion = null;
+        return fuenteId == 0 ? Task.CompletedTask : EjecutarAsync(LeerAsync);
+    }
+    private Task PaginarAsync(int cambio) { pagina += cambio; return EjecutarAsync(LeerAsync); }
+    private async Task LeerAsync()
+    {
+        analisis = []; detalle = null; evaluacion = null;
+        analisis = await Sesion.ObtenerAsync<List<AnalisisCalidadDto>>($"{Ruta}?pagina={pagina}");
+    }
+    private void Nuevo()
+    {
+        editando = null; error = null; mensaje = null;
+        var zona = TimeZoneInfo.FindSystemTimeZoneById("America/Argentina/Buenos_Aires");
+        editor = new() { Fecha = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, zona).DateTime) };
+    }
+    private Task GuardarAsync() => EjecutarAsync(async () =>
+    {
+        if (editor is null) return;
+        if (editando is null) await Sesion.EnviarAsync(HttpMethod.Post, Ruta, editor.Contrato());
+        else await Sesion.EnviarAsync(HttpMethod.Put, $"{Ruta}/{editando.IdAnalisis}", new EditarAnalisisDto
+            { Fecha = editor.Fecha, Mediciones = editor.Mediciones(), Observaciones = editor.Observaciones, Version = editando.Version });
+        editor = null; pagina = 1; mensaje = "Análisis guardado.";
+        await LeerAsync();
+    });
+    private Task EditarAsync(int id) => EjecutarAsync(async () =>
+    {
+        editando = await Sesion.ObtenerAsync<AnalisisCalidadDto>($"{Ruta}/{id}");
+        editor = EntradaAnalisis.Desde(editando);
+    });
+    private Task VerAsync(int id) => EjecutarAsync(async () =>
+    {
+        detalle = null; evaluacion = null;
+        detalle = await Sesion.ObtenerAsync<AnalisisCalidadDto>($"{Ruta}/{id}");
+    });
+    private Task EvaluarAsync() => EjecutarAsync(async () =>
+    {
+        evaluacion = null;
+        evaluacion = await Sesion.ObtenerAsync<EvaluacionCalidadDto>($"{Ruta}/{detalle!.IdAnalisis}/evaluacion");
+    });
+    private async Task EjecutarAsync(Func<Task> accion)
+    {
+        if (ocupado) return;
+        ocupado = true; error = null; mensaje = null;
+        try { await accion(); }
+        catch (ErrorApi ex) { error = ex.Message; if (ex.Estado == 401) await SesionVencida.InvokeAsync(); }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException) { error = "No se pudo confirmar la operación. Actualizá el histórico antes de repetir un guardado."; }
+        finally { ocupado = false; }
+    }
+    private static string Numero(decimal? valor) => valor?.ToString("0.######", Cultura) ?? "—";
+}

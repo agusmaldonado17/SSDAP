@@ -1,0 +1,22 @@
+@using SSDAP.Shared.DTOs.Simulaciones
+@using SSDAP.Web.Services
+<div class="table-wrap mixture-table"><table><thead><tr><th>Parámetro</th><th>Concentración</th><th>Unidad</th><th>Evaluación</th><th>Límite usado</th></tr></thead><tbody>
+@foreach (var fila in Parametros)
+{
+    <tr><td>@Presentacion.Parametro(fila.Codigo)</td><td><strong class="mixture-value">@Presentacion.Numero(fila.Valor, "Sin resultado")</strong>
+    @if (fila.Valor is null) { <small class="block muted">@Presentacion.Estado(fila.EstadoCalculo)</small> }
+    @if (fila.FuentesSinMedicion.Count > 0) { <small class="block">Faltan mediciones de las fuentes: @string.Join(", ", fila.FuentesSinMedicion.Select(id => NombresFuentes.GetValueOrDefault(id) ?? $"Fuente #{id}"))</small> }
+    </td><td>@fila.Unidad</td><td><span class="evaluation-badge" data-state="@fila.EstadoEvaluacion">@Presentacion.Estado(fila.EstadoEvaluacion)</span></td><td>
+    @if (fila.Limite is { } limite)
+    {
+        <span>Mín.: @Presentacion.Numero(limite.ValorMinimo, "Sin mínimo") · Máx.: @Presentacion.Numero(limite.ValorMaximo, "Sin máximo")</span>
+        
+    }
+    else { <span>Sin límite aplicable</span> }
+    </td></tr>
+}
+</tbody></table></div>
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<ParametroMezclaDto> Parametros { get; set; } = [];
+    [Parameter] public IReadOnlyDictionary<int, string> NombresFuentes { get; set; } = new Dictionary<int, string>();
+}

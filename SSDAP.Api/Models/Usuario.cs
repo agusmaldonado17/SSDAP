@@ -35,6 +35,9 @@ namespace SSDAP.Api.Models
 
         public string EmailNormalizado { get; set; } = string.Empty;
 
+        [MaxLength(36), Column("sello_seguridad")]
+        public string SelloSeguridad { get; set; } = string.Empty;
+
         [Column("activo")]
         public bool Activo { get; set; }
 

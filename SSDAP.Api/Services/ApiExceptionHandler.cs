@@ -11,6 +11,7 @@ public sealed class ApiExceptionHandler(ILogger<ApiExceptionHandler> logger) : I
         {
             ReglaNegocioException regla => (regla.Estado, regla.Message),
             DbUpdateException { InnerException: MySqlException { Number: 1062 } } => (409, "Ya existe un registro con esos datos."),
+            MySqlException { Number: 1062 } => (409, "Ya existe un registro con esos datos."),
             _ => (500, "No se pudo completar la operación.")
         };
         context.Response.StatusCode = error.Item1;

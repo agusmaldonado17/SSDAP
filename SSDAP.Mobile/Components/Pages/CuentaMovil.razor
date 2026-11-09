@@ -1,0 +1,33 @@
+@using SSDAP.Shared.DTOs.Usuarios
+@inject SesionMovil Sesion
+<h1>Mi cuenta</h1>
+<section class="card profile-card"><div class="avatar" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 22v-3a8 8 0 0 1 16 0v3"/></svg></div><strong>@Sesion.Actual?.Usuario.Nombre @Sesion.Actual?.Usuario.Apellido</strong><p class="muted">@Sesion.Actual?.Usuario.Email</p></section>
+@if(error is not null) { <p role="alert" class="notice">@error</p> }
+<details class="card account-security"><summary>Cambiar contraseña</summary>
+<EditForm Model="entrada" OnValidSubmit="GuardarAsync"><DataAnnotationsValidator/><ValidationSummary/>
+<fieldset disabled="@ocupado">
+<label>Contraseña actual<InputText type="password" autocomplete="current-password" @bind-Value="entrada.Actual" /></label>
+<label>Nueva contraseña<InputText type="password" autocomplete="new-password" @bind-Value="entrada.Nueva" /></label>
+<label>Repetir nueva contraseña<InputText type="password" autocomplete="new-password" @bind-Value="entrada.Confirmacion" /></label>
+<p class="muted">Vas a tener que iniciar sesión nuevamente.</p><button class="primary full-width" type="submit">Guardar contraseña</button>
+</fieldset></EditForm>
+</details>
+<button class="danger-quiet full-width" disabled="@ocupado" @onclick="() => Salir.InvokeAsync()">Cerrar sesión</button>
+@code {
+    [Parameter] public EventCallback Salir { get; set; }
+    private Entrada entrada=new();
+    private bool ocupado;
+    private string? error;
+    private async Task GuardarAsync() {
+        if(ocupado) return;ocupado=true;error=null;
+        try { await Sesion.EnviarAsync(HttpMethod.Put,"api/mi-cuenta/password",new CambiarPasswordDto { PasswordActual=entrada.Actual,PasswordNueva=entrada.Nueva });entrada=new();Sesion.Limpiar(); }
+        catch(ErrorMovil ex) { error=ex.Message; }
+        catch(Exception ex) when(ex is HttpRequestException or TaskCanceledException) { error="No se pudo confirmar el cambio. Verificá la conexión antes de reintentar."; }
+        finally { ocupado=false; }
+    }
+    public sealed class Entrada {
+        [Required,StringLength(128)] public string Actual { get; set; }="";
+        [Required,StringLength(128)] public string Nueva { get; set; }="";
+        [Required,Compare(nameof(Nueva),ErrorMessage="Las contraseñas no coinciden.")] public string Confirmacion { get; set; }="";
+    }
+}

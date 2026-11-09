@@ -1,0 +1,73 @@
+@using System.Globalization
+@using SSDAP.Shared.DTOs.Baterias
+@using SSDAP.Shared.DTOs.Calendario
+@using SSDAP.Web.Services
+@inherits PanelLocalidadBase
+<section class="editor">
+<h2>Programar varios días</h2>
+<EstadoOperacion Error="@Error" Mensaje="@Mensaje" Ocupado="Ocupado" />
+<fieldset disabled="@Ocupado">
+    <label for="lote-bateria">Batería</label><select id="lote-bateria" @bind="bateriaId"><option value="0">Seleccioná una batería</option>
+    @foreach (var b in baterias) { <option value="@b.IdBateria" disabled="@(b.Estado != "Activa")">@b.Nombre (@b.Estado)</option> }</select>
+    <label for="lote-mes">Mes</label><input id="lote-mes" type="month" value="@mes" @onchange="CambiarMes" />
+    <p>Elegí los días en los que comienza cada turno.</p>
+    <div class="actions"><button type="button" @onclick='() => Seleccionar("todos")'>Todos</button><button type="button" @onclick='() => Seleccionar("pares")'>Pares</button><button type="button" @onclick='() => Seleccionar("impares")'>Impares</button><button type="button" @onclick="() => dias.Clear()">Limpiar</button></div>
+    <div class="day-picker" aria-label="Días del mes">
+    @foreach (var dia in DiasMes())
+    {
+        <button type="button" class="@(dias.Contains(dia) ? "selected" : "")" aria-pressed="@(dias.Contains(dia) ? "true" : "false")" @onclick="() => Alternar(dia)">@dia</button>
+    }
+    </div>
+    <div class="form-grid"><div><label for="lote-inicio">Hora de inicio</label><input id="lote-inicio" type="time" value="@inicio" @onchange='e => inicio = e.Value?.ToString() ?? ""' /></div>
+    <div><label for="lote-fin">Hora de fin</label><input id="lote-fin" type="time" value="@fin" @onchange='e => fin = e.Value?.ToString() ?? ""' /></div></div>
+    <p class="muted">Si el fin es igual o anterior al inicio, el turno termina al día siguiente. Para 24 horas, elegí 00:00 en ambos campos.</p>
+    <label for="lote-notas">Observaciones</label><textarea id="lote-notas" maxlength="255" @bind="notas"></textarea>
+    <p><strong>@dias.Count turnos seleccionados</strong> · horario de Argentina.</p>
+    <details><summary>Ver días seleccionados</summary>@string.Join(", ", dias.Order())</details>
+    <p class="muted">Se guardan todos juntos. Si alguno se superpone con un turno existente, no se agrega ninguno.</p>
+    <button type="button" class="action-primary" disabled="@(dias.Count == 0 || bateriaId == 0)" @onclick="GuardarAsync">Guardar @dias.Count turnos</button>
+    <button type="button" @onclick="Cancelar">Volver</button>
+</fieldset>
+</section>
+@code {
+    [Parameter] public string Mes { get; set; } = "";
+    [Parameter] public EventCallback Guardado { get; set; }
+    [Parameter] public EventCallback Cancelar { get; set; }
+    private List<BateriaResumenDto> baterias = [];
+    private HashSet<int> dias = [];
+    private int bateriaId;
+    private string mes = "", inicio = "00:00", fin = "00:00";
+    private string? notas;
+    protected override async Task OnInitializedAsync()
+    {
+        mes = Mes;
+        await EjecutarAsync(async () => baterias = await LeerPaginasAsync<BateriaResumenDto>($"{RutaLocalidad}/baterias"));
+    }
+    private IEnumerable<int> DiasMes() => DateTime.TryParseExact(mes, "yyyy-MM", CultureInfo.InvariantCulture, DateTimeStyles.None, out var fecha)
+        ? Enumerable.Range(1, DateTime.DaysInMonth(fecha.Year, fecha.Month)) : [];
+    private void CambiarMes(ChangeEventArgs e) { mes = e.Value?.ToString() ?? ""; dias.Clear(); }
+    private void Alternar(int dia) { if (!dias.Add(dia)) dias.Remove(dia); }
+    private void Seleccionar(string modo) => dias = DiasMes().Where(d => modo == "todos" || (modo == "pares" ? d % 2 == 0 : d % 2 != 0)).ToHashSet();
+    public static CrearTurnosDto Preparar(string mes, IEnumerable<int> dias, int bateriaId, string inicio, string fin, string? notas)
+    {
+        var fecha = Presentacion.Mes(mes);
+        if (bateriaId <= 0 || !TimeOnly.TryParseExact(inicio, "HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out var desde) ||
+            !TimeOnly.TryParseExact(fin, "HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out var hasta))
+            throw new ErrorApi(400, "Seleccioná una batería y horarios válidos.");
+        var seleccion = dias.Distinct().Order().ToArray();
+        if (seleccion.Length == 0 || seleccion.Any(d => d < 1 || d > DateTime.DaysInMonth(fecha.Year, fecha.Month)))
+            throw new ErrorApi(400, "Seleccioná días válidos del mes.");
+        return new() { Turnos = seleccion.Select(d =>
+        {
+            var dia = new DateOnly(fecha.Year, fecha.Month, d);
+            return new GuardarProgramacionDto { IdBateria = bateriaId, Inicio = Presentacion.Instante(dia.ToDateTime(desde)),
+                Fin = Presentacion.Instante((hasta <= desde ? dia.AddDays(1) : dia).ToDateTime(hasta)), Observaciones = notas };
+        }).ToList() };
+    }
+    private Task GuardarAsync() => EjecutarAsync(async () =>
+    {
+        if (dias.Count == 0) return;
+        await Sesion.EnviarAsync(HttpMethod.Post, $"{RutaLocalidad}/calendario/lote", Preparar(mes, dias, bateriaId, inicio, fin, notas));
+        dias.Clear(); await Guardado.InvokeAsync();
+    });
+}

@@ -20,10 +20,25 @@ namespace SSDAP.Api.Models
         public int Anio { get; set; }
 
         [Column("caudal_total", TypeName = "decimal(10,2)")]
-        public decimal CaudalTotal { get; set; }
+        public decimal? CaudalTotal { get; set; }
 
         [Column("dosis_cloro", TypeName = "decimal(10,2)")]
-        public decimal DosisCloro { get; set; }
+        public decimal? DosisCloro { get; set; }
+
+        [Column("revision")]
+        public int? Revision { get; set; }
+
+        [Column("version_formato")]
+        public int? VersionFormato { get; set; }
+
+        [Column("reporte_json", TypeName = "longtext")]
+        public string? ReporteJson { get; set; }
+
+        [Column("creado_en_utc", TypeName = "datetime(6)")]
+        public DateTime? CreadoEnUtc { get; set; }
+
+        [Column("creado_por_id")]
+        public int? CreadoPorId { get; set; }
 
         [Required]
         [MaxLength(30)]

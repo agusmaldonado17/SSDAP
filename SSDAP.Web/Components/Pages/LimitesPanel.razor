@@ -1,0 +1,75 @@
+@using System.ComponentModel.DataAnnotations
+@using SSDAP.Shared.DTOs.Calidad
+@using SSDAP.Web.Services
+@inherits PanelApiBase
+<span class="eyebrow">Administración</span><h1>Límites de calidad</h1>
+<p class="muted">Configuración compartida por todas las localidades. Las revisiones guardadas conservan los límites utilizados al generarse.</p>
+<EstadoOperacion Error="@Error" Mensaje="@Mensaje" Ocupado="Ocupado" />
+@if (entrada is not null)
+{
+    <section class="editor"><h2>@(entrada.Id is null ? "Nuevo límite" : "Editar límite")</h2>
+    <EditForm Model="entrada" OnValidSubmit="GuardarAsync" FormName="limite"><DataAnnotationsValidator /><ValidationSummary />
+    <fieldset disabled="@Ocupado">
+        <label for="limite-codigo">Parámetro y unidad</label><InputSelect id="limite-codigo" @bind-Value="entrada.Codigo" disabled="@(entrada.Id is not null)">
+        <option value="">Seleccioná un parámetro</option>
+        @foreach (var item in catalogo) { <option value="@item.Codigo">@Presentacion.Parametro(item.Codigo) (@item.Unidad)</option> }
+        </InputSelect>
+        <div class="form-grid"><div><label for="limite-minimo">Mínimo (opcional)</label><InputNumber id="limite-minimo" step="0.000001" @bind-Value="entrada.Minimo" /></div>
+        <div><label for="limite-maximo">Máximo (opcional)</label><InputNumber id="limite-maximo" step="0.000001" @bind-Value="entrada.Maximo" /></div></div>
+        <label for="limite-referencia">Referencia del límite</label><InputText id="limite-referencia" maxlength="255" @bind-Value="entrada.Referencia" />
+        <label for="limite-notas">Observaciones</label><InputTextArea id="limite-notas" maxlength="255" @bind-Value="entrada.Observaciones" />
+        <label class="check-label"><InputCheckbox @bind-Value="entrada.Activo" /> Usar este límite en las comparaciones</label>
+        <div class="limit-actions"><button class="action-primary" type="submit">Guardar límite</button><button type="button" @onclick="() => entrada = null">Volver</button></div>
+    </fieldset></EditForm></section>
+}
+else
+{
+    <button class="action-primary" disabled="@(Ocupado || catalogo.Count == 0)" @onclick="() => entrada = new()">Nuevo límite</button>
+    <div class="table-wrap"><table><thead><tr><th>Parámetro</th><th>Unidad</th><th>Mínimo</th><th>Máximo</th><th>Referencia</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>
+    @foreach (var item in limites)
+    { <tr><td>@Presentacion.Parametro(item.Codigo ?? item.Nombre)</td><td>@item.Unidad</td><td>@Presentacion.Numero(item.ValorMinimo, "—")</td><td>@Presentacion.Numero(item.ValorMaximo, "—")</td><td>@item.Referencia</td><td><span class="badge-state" data-state="@(item.Activo ? "Activa" : "Inactiva")">@(item.Activo ? "Activo" : "Inactivo")</span></td><td><button class="row-action" disabled="@Ocupado" @onclick="() => EditarAsync(item.IdParametroLey)">Editar</button></td></tr> }
+    </tbody></table></div>
+}
+@code {
+    private List<ParametroCatalogoDto> catalogo = [];
+    private List<ParametroCalidadDto> limites = [];
+    private Entrada? entrada;
+    protected override Task OnInitializedAsync() => CargarAsync();
+    private Task CargarAsync() => EjecutarAsync(LeerAsync);
+    private async Task LeerAsync()
+    {
+        catalogo = await Sesion.ObtenerAsync<List<ParametroCatalogoDto>>("api/parametros-calidad/catalogo");
+        limites = await LeerPaginasAsync<ParametroCalidadDto>("api/parametros-calidad");
+    }
+    private Task EditarAsync(int id) => EjecutarAsync(async () =>
+    {
+        var dato = await Sesion.ObtenerAsync<ParametroCalidadDto>($"api/parametros-calidad/{id}");
+        entrada = new() { Id = id, Codigo = dato.Codigo ?? "", Minimo = dato.ValorMinimo, Maximo = dato.ValorMaximo,
+            Referencia = dato.Referencia ?? "", Activo = dato.Activo, Observaciones = dato.Observaciones, Version = dato.Version };
+    });
+    private Task GuardarAsync() => EjecutarAsync(async () =>
+    {
+        if (entrada is null) return;
+        var e = entrada;
+        var dto = new ActualizarParametroCalidadDto { Codigo = e.Codigo, ValorMinimo = e.Minimo, ValorMaximo = e.Maximo,
+            Referencia = e.Referencia.Trim(), Observaciones = e.Observaciones, Activo = e.Activo, Version = e.Version };
+        await Sesion.EnviarAsync(e.Id is null ? HttpMethod.Post : HttpMethod.Put, "api/parametros-calidad" + (e.Id is null ? "" : $"/{e.Id}"), dto);
+        entrada = null; Mensaje = "Límite guardado."; await LeerAsync();
+    });
+    public sealed class Entrada : IValidatableObject
+    {
+        public int? Id { get; set; }
+        public int Version { get; set; }
+        [Required(ErrorMessage = "Seleccioná un parámetro.")] public string Codigo { get; set; } = "";
+        public decimal? Minimo { get; set; }
+        public decimal? Maximo { get; set; }
+        [Required(ErrorMessage = "Indicá la referencia del límite."), StringLength(255)] public string Referencia { get; set; } = "";
+        [StringLength(255)] public string? Observaciones { get; set; }
+        public bool Activo { get; set; } = true;
+        public IEnumerable<ValidationResult> Validate(ValidationContext context)
+        {
+            if (Activo && Minimo is null && Maximo is null) yield return new("Ingresá un mínimo o un máximo para activar la comparación.");
+            if (Minimo > Maximo) yield return new("El mínimo no puede superar al máximo.");
+        }
+    }
+}

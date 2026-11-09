@@ -24,5 +24,6 @@ namespace SSDAP.Api.Models
         [MaxLength(30)]
         [Column("estado")]
         public string Estado { get; set; } = string.Empty;
+
     }
 }

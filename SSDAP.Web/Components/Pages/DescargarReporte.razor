@@ -1,0 +1,35 @@
+@using SSDAP.Shared.DTOs.Reportes
+@using SSDAP.Web.Services
+@using Microsoft.JSInterop
+@inject IJSRuntime JS
+@inject ILogger<DescargarReporte> Logger
+<button class="row-action" disabled="@ocupado" @onclick="DescargarAsync">@(ocupado ? "Generando PDF…" : "Descargar PDF")</button>
+@if (error is not null) { <p role="alert">@error</p> }
+@code {
+    [Parameter, EditorRequired] public string Localidad { get; set; } = "";
+    [Parameter, EditorRequired] public ProduccionMensualDto Produccion { get; set; } = default!;
+    [Parameter] public CalidadMensualDto? Calidad { get; set; }
+    [Parameter] public ResultadoMensualResumenDto? Revision { get; set; }
+    private bool ocupado;
+    private string? error;
+    private async Task DescargarAsync()
+    {
+        if (ocupado) return;
+        ocupado = true; error = null;
+        try
+        {
+            var bytes = ReportePdf.Generar(Localidad, Produccion, Calidad, Revision);
+            using var stream = new MemoryStream(bytes);
+            using var referencia = new DotNetStreamReference(stream);
+            await using var modulo = await JS.InvokeAsync<IJSObjectReference>("import", "./descargas.js");
+            await modulo.InvokeVoidAsync("descargarPdf", $"SSDAP-{Produccion.Anio}-{Produccion.Mes:00}" +
+                (Revision is null ? "-calculado" : $"-revision-{Revision.IdResultado}") + ".pdf", referencia);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error al exportar reporte PDF");
+            error = "No se pudo descargar el PDF. Volvé a intentarlo.";
+        }
+        finally { ocupado = false; }
+    }
+}

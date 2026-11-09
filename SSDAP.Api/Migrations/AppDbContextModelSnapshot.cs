@@ -26,10 +26,6 @@ namespace SSDAP.Api.Migrations
                         .HasColumnType("int")
                         .HasColumnName("id_acueducto");
 
-                    b.Property<decimal>("CostoM3")
-                        .HasColumnType("decimal(10,2)")
-                        .HasColumnName("costo_m3");
-
                     b.Property<int>("IdFuente")
                         .HasColumnType("int")
                         .HasColumnName("id_fuente");
@@ -50,68 +46,76 @@ namespace SSDAP.Api.Migrations
                         .HasColumnType("int")
                         .HasColumnName("id_analisis");
 
-                    b.Property<decimal>("AlcalinidadTotal")
-                        .HasColumnType("decimal(10,2)")
+                    b.Property<decimal?>("AlcalinidadTotal")
+                        .HasColumnType("decimal(14,6)")
                         .HasColumnName("alcalinidad_total");
 
-                    b.Property<decimal>("Amonio")
-                        .HasColumnType("decimal(10,2)")
+                    b.Property<decimal?>("Amonio")
+                        .HasColumnType("decimal(14,6)")
                         .HasColumnName("amonio");
 
-                    b.Property<decimal>("Arsenico")
-                        .HasColumnType("decimal(10,2)")
+                    b.Property<decimal?>("Arsenico")
+                        .HasColumnType("decimal(14,6)")
                         .HasColumnName("arsenico");
 
-                    b.Property<decimal>("Bicarbonato")
-                        .HasColumnType("decimal(10,2)")
+                    b.Property<decimal?>("Bicarbonato")
+                        .HasColumnType("decimal(14,6)")
                         .HasColumnName("bicarbonato");
 
-                    b.Property<decimal>("Calcio")
-                        .HasColumnType("decimal(10,2)")
+                    b.Property<decimal?>("Calcio")
+                        .HasColumnType("decimal(14,6)")
                         .HasColumnName("calcio");
 
-                    b.Property<decimal>("Carbonato")
-                        .HasColumnType("decimal(10,2)")
+                    b.Property<decimal?>("Carbonato")
+                        .HasColumnType("decimal(14,6)")
                         .HasColumnName("carbonato");
 
-                    b.Property<decimal>("Cloruro")
-                        .HasColumnType("decimal(10,2)")
+                    b.Property<decimal?>("Cloruro")
+                        .HasColumnType("decimal(14,6)")
                         .HasColumnName("cloruro");
 
-                    b.Property<decimal>("Conductividad")
-                        .HasColumnType("decimal(10,2)")
+                    b.Property<decimal?>("Conductividad")
+                        .HasColumnType("decimal(14,6)")
                         .HasColumnName("conductividad");
 
-                    b.Property<decimal>("DurezaTotal")
-                        .HasColumnType("decimal(10,2)")
+                    b.Property<decimal?>("DurezaTotal")
+                        .HasColumnType("decimal(14,6)")
                         .HasColumnName("dureza_total");
 
-                    b.Property<DateOnly>("Fecha")
+                    b.Property<DateTime>("Fecha")
                         .HasColumnType("date")
                         .HasColumnName("fecha");
 
-                    b.Property<decimal>("Fluor")
-                        .HasColumnType("decimal(10,2)")
+                    b.Property<decimal?>("Fluor")
+                        .HasColumnType("decimal(14,6)")
                         .HasColumnName("fluor");
 
-                    b.Property<decimal>("Hierro")
-                        .HasColumnType("decimal(10,2)")
+                    b.Property<decimal?>("Hierro")
+                        .HasColumnType("decimal(14,6)")
                         .HasColumnName("hierro");
 
                     b.Property<int>("IdFuente")
                         .HasColumnType("int")
                         .HasColumnName("id_fuente");
 
-                    b.Property<decimal>("Magnesio")
-                        .HasColumnType("decimal(10,2)")
+                    b.Property<decimal?>("Magnesio")
+                        .HasColumnType("decimal(14,6)")
                         .HasColumnName("magnesio");
 
-                    b.Property<decimal>("Nitrato")
-                        .HasColumnType("decimal(10,2)")
+                    b.Property<DateTime?>("ModificadoEnUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("modificado_en_utc");
+
+                    b.Property<int?>("ModificadoPorId")
+                        .HasColumnType("int")
+                        .HasColumnName("modificado_por_id");
+
+                    b.Property<decimal?>("Nitrato")
+                        .HasColumnType("decimal(14,6)")
                         .HasColumnName("nitrato");
 
-                    b.Property<decimal>("Nitrito")
-                        .HasColumnType("decimal(10,2)")
+                    b.Property<decimal?>("Nitrito")
+                        .HasColumnType("decimal(14,6)")
                         .HasColumnName("nitrito");
 
                     b.Property<string>("Observaciones")
@@ -119,33 +123,40 @@ namespace SSDAP.Api.Migrations
                         .HasColumnType("varchar(255)")
                         .HasColumnName("observaciones");
 
-                    b.Property<decimal>("Ph")
+                    b.Property<decimal?>("Ph")
                         .HasColumnType("decimal(4,2)")
                         .HasColumnName("ph");
 
-                    b.Property<decimal>("Potasio")
-                        .HasColumnType("decimal(10,2)")
+                    b.Property<decimal?>("Potasio")
+                        .HasColumnType("decimal(14,6)")
                         .HasColumnName("potasio");
 
-                    b.Property<decimal>("Ras")
-                        .HasColumnType("decimal(10,2)")
+                    b.Property<decimal?>("Ras")
+                        .HasColumnType("decimal(14,6)")
                         .HasColumnName("ras");
 
-                    b.Property<decimal>("ResiduoSeco")
-                        .HasColumnType("decimal(10,2)")
+                    b.Property<decimal?>("ResiduoSeco")
+                        .HasColumnType("decimal(14,6)")
                         .HasColumnName("residuo_seco");
 
-                    b.Property<decimal>("Sodio")
-                        .HasColumnType("decimal(10,2)")
+                    b.Property<decimal?>("Sodio")
+                        .HasColumnType("decimal(14,6)")
                         .HasColumnName("sodio");
 
-                    b.Property<decimal>("Sulfato")
-                        .HasColumnType("decimal(10,2)")
+                    b.Property<decimal?>("Sulfato")
+                        .HasColumnType("decimal(14,6)")
                         .HasColumnName("sulfato");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("int")
+                        .HasColumnName("version");
 
                     b.HasKey("IdAnalisis");
 
-                    b.HasIndex("IdFuente");
+                    b.HasIndex("ModificadoPorId");
+
+                    b.HasIndex("IdFuente", "Fecha", "IdAnalisis");
 
                     b.ToTable("analisis_calidad");
                 });
@@ -181,10 +192,6 @@ namespace SSDAP.Api.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("varchar(100)")
                         .HasColumnName("nombre");
-
-                    b.Property<decimal>("PotenciaKw")
-                        .HasColumnType("decimal(10,2)")
-                        .HasColumnName("potencia_kw");
 
                     b.HasKey("IdBateria");
 
@@ -293,12 +300,70 @@ namespace SSDAP.Api.Migrations
                     b.ToTable("localidad");
                 });
 
+            modelBuilder.Entity("SSDAP.Api.Models.MedicionCloro", b =>
+                {
+                    b.Property<int>("IdMedicionCloro")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id_medicion_cloro");
+
+                    b.Property<DateTime>("CreadoEnUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("creado_en_utc");
+
+                    b.Property<int>("CreadoPorId")
+                        .HasColumnType("int")
+                        .HasColumnName("creado_por_id");
+
+                    b.Property<DateTime>("FechaHoraUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("fecha_hora_utc");
+
+                    b.Property<int>("IdLocalidad")
+                        .HasColumnType("int")
+                        .HasColumnName("id_localidad");
+
+                    b.Property<string>("Observaciones")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)")
+                        .HasColumnName("observaciones");
+
+                    b.Property<string>("TipoCloro")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("tipo_cloro");
+
+                    b.Property<decimal>("ValorMgL")
+                        .HasPrecision(14, 6)
+                        .HasColumnType("decimal(14,6)")
+                        .HasColumnName("valor_mg_l");
+
+                    b.HasKey("IdMedicionCloro");
+
+                    b.HasIndex("CreadoPorId");
+
+                    b.HasIndex("IdLocalidad", "FechaHoraUtc", "IdMedicionCloro");
+
+                    b.ToTable("medicion_cloro", (string)null);
+                });
+
             modelBuilder.Entity("SSDAP.Api.Models.ParametroLey", b =>
                 {
                     b.Property<int>("IdParametroLey")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int")
                         .HasColumnName("id_parametro_ley");
+
+                    b.Property<bool>("Activo")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("activo");
+
+                    b.Property<string>("Codigo")
+                        .HasMaxLength(40)
+                        .HasColumnType("varchar(40)")
+                        .HasColumnName("codigo")
+                        .UseCollation("utf8mb4_bin");
 
                     b.Property<string>("NombreParametro")
                         .IsRequired()
@@ -311,6 +376,11 @@ namespace SSDAP.Api.Migrations
                         .HasColumnType("varchar(255)")
                         .HasColumnName("observaciones");
 
+                    b.Property<string>("Referencia")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)")
+                        .HasColumnName("referencia");
+
                     b.Property<string>("Unidad")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -318,14 +388,21 @@ namespace SSDAP.Api.Migrations
                         .HasColumnName("unidad");
 
                     b.Property<decimal?>("ValorMaximo")
-                        .HasColumnType("decimal(10,2)")
+                        .HasColumnType("decimal(14,6)")
                         .HasColumnName("valor_maximo");
 
                     b.Property<decimal?>("ValorMinimo")
-                        .HasColumnType("decimal(10,2)")
+                        .HasColumnType("decimal(14,6)")
                         .HasColumnName("valor_minimo");
 
+                    b.Property<int>("Version")
+                        .HasColumnType("int")
+                        .HasColumnName("version");
+
                     b.HasKey("IdParametroLey");
+
+                    b.HasIndex("Codigo")
+                        .IsUnique();
 
                     b.ToTable("parametro_ley");
                 });
@@ -371,15 +448,35 @@ namespace SSDAP.Api.Migrations
                         .HasColumnType("int")
                         .HasColumnName("id_programacion");
 
-                    b.Property<DateOnly>("Fecha")
+                    b.Property<DateTime?>("CreadoEnUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("creado_en_utc");
+
+                    b.Property<int?>("CreadoPorId")
+                        .HasColumnType("int")
+                        .HasColumnName("creado_por_id");
+
+                    b.Property<string>("Estado")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)")
+                        .HasDefaultValue("PendienteRevision")
+                        .HasColumnName("estado");
+
+                    b.Property<DateTime>("Fecha")
                         .HasColumnType("date")
                         .HasColumnName("fecha");
 
-                    b.Property<TimeOnly>("HoraFin")
+                    b.Property<DateTime?>("FinUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("fin_utc");
+
+                    b.Property<TimeSpan>("HoraFin")
                         .HasColumnType("time")
                         .HasColumnName("hora_fin");
 
-                    b.Property<TimeOnly>("HoraInicio")
+                    b.Property<TimeSpan>("HoraInicio")
                         .HasColumnType("time")
                         .HasColumnName("hora_inicio");
 
@@ -387,16 +484,72 @@ namespace SSDAP.Api.Migrations
                         .HasColumnType("int")
                         .HasColumnName("id_bateria");
 
+                    b.Property<DateTime?>("InicioUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("inicio_utc");
+
+                    b.Property<DateTime?>("ModificadoEnUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("modificado_en_utc");
+
+                    b.Property<int?>("ModificadoPorId")
+                        .HasColumnType("int")
+                        .HasColumnName("modificado_por_id");
+
+                    b.Property<string>("NombreBateria")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("nombre_bateria");
+
                     b.Property<string>("Observaciones")
                         .HasMaxLength(255)
                         .HasColumnType("varchar(255)")
                         .HasColumnName("observaciones");
 
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("int")
+                        .HasColumnName("version");
+
                     b.HasKey("IdProgramacion");
+
+                    b.HasIndex("CreadoPorId");
 
                     b.HasIndex("IdBateria");
 
+                    b.HasIndex("ModificadoPorId");
+
+                    b.HasIndex("InicioUtc", "FinUtc");
+
                     b.ToTable("programacion_bateria");
+                });
+
+            modelBuilder.Entity("SSDAP.Api.Models.ProgramacionPozo", b =>
+                {
+                    b.Property<int>("IdProgramacion")
+                        .HasColumnType("int")
+                        .HasColumnName("id_programacion");
+
+                    b.Property<int>("IdPozo")
+                        .HasColumnType("int")
+                        .HasColumnName("id_pozo");
+
+                    b.Property<decimal>("CaudalM3H")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("decimal(10,2)")
+                        .HasColumnName("caudal_m3_h");
+
+                    b.Property<string>("Codigo")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)")
+                        .HasColumnName("codigo");
+
+                    b.HasKey("IdProgramacion", "IdPozo");
+
+                    b.HasIndex("IdPozo");
+
+                    b.ToTable("programacion_pozo", (string)null);
                 });
 
             modelBuilder.Entity("SSDAP.Api.Models.ResultadoMensual", b =>
@@ -410,11 +563,19 @@ namespace SSDAP.Api.Migrations
                         .HasColumnType("int")
                         .HasColumnName("anio");
 
-                    b.Property<decimal>("CaudalTotal")
+                    b.Property<decimal?>("CaudalTotal")
                         .HasColumnType("decimal(10,2)")
                         .HasColumnName("caudal_total");
 
-                    b.Property<decimal>("DosisCloro")
+                    b.Property<DateTime?>("CreadoEnUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("creado_en_utc");
+
+                    b.Property<int?>("CreadoPorId")
+                        .HasColumnType("int")
+                        .HasColumnName("creado_por_id");
+
+                    b.Property<decimal?>("DosisCloro")
                         .HasColumnType("decimal(10,2)")
                         .HasColumnName("dosis_cloro");
 
@@ -424,7 +585,7 @@ namespace SSDAP.Api.Migrations
                         .HasColumnType("varchar(30)")
                         .HasColumnName("estado_calidad");
 
-                    b.Property<DateOnly>("FechaGeneracion")
+                    b.Property<DateTime>("FechaGeneracion")
                         .HasColumnType("date")
                         .HasColumnName("fecha_generacion");
 
@@ -441,9 +602,24 @@ namespace SSDAP.Api.Migrations
                         .HasColumnType("varchar(255)")
                         .HasColumnName("observaciones");
 
+                    b.Property<string>("ReporteJson")
+                        .HasColumnType("longtext")
+                        .HasColumnName("reporte_json");
+
+                    b.Property<int?>("Revision")
+                        .HasColumnType("int")
+                        .HasColumnName("revision");
+
+                    b.Property<int?>("VersionFormato")
+                        .HasColumnType("int")
+                        .HasColumnName("version_formato");
+
                     b.HasKey("IdResultado");
 
-                    b.HasIndex("IdLocalidad");
+                    b.HasIndex("CreadoPorId");
+
+                    b.HasIndex("IdLocalidad", "Anio", "Mes", "Revision")
+                        .IsUnique();
 
                     b.ToTable("resultado_mensual");
                 });
@@ -485,6 +661,38 @@ namespace SSDAP.Api.Migrations
                         .IsUnique();
 
                     b.ToTable("rol");
+                });
+
+            modelBuilder.Entity("SSDAP.Api.Models.SesionUsuario", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(36)
+                        .HasColumnType("varchar(36)")
+                        .HasColumnName("id_sesion");
+
+                    b.Property<DateTime>("CreadaEnUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("creada_en_utc");
+
+                    b.Property<DateTime>("ExpiraEnUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("expira_en_utc");
+
+                    b.Property<int>("IdUsuario")
+                        .HasColumnType("int")
+                        .HasColumnName("id_usuario");
+
+                    b.Property<DateTime>("UltimaActividadUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("ultima_actividad_utc");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExpiraEnUtc");
+
+                    b.HasIndex("IdUsuario");
+
+                    b.ToTable("sesion_usuario", (string)null);
                 });
 
             modelBuilder.Entity("SSDAP.Api.Models.Usuario", b =>
@@ -531,6 +739,12 @@ namespace SSDAP.Api.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("varchar(255)")
                         .HasColumnName("password_hash");
+
+                    b.Property<string>("SelloSeguridad")
+                        .IsRequired()
+                        .HasMaxLength(36)
+                        .HasColumnType("varchar(36)")
+                        .HasColumnName("sello_seguridad");
 
                     b.HasKey("IdUsuario");
 
@@ -583,10 +797,16 @@ namespace SSDAP.Api.Migrations
                     b.HasOne("SSDAP.Api.Models.FuenteAgua", "FuenteAgua")
                         .WithMany()
                         .HasForeignKey("IdFuente")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("SSDAP.Api.Models.Usuario", "ModificadoPor")
+                        .WithMany()
+                        .HasForeignKey("ModificadoPorId");
+
                     b.Navigation("FuenteAgua");
+
+                    b.Navigation("ModificadoPor");
                 });
 
             modelBuilder.Entity("SSDAP.Api.Models.Bateria", b =>
@@ -630,6 +850,21 @@ namespace SSDAP.Api.Migrations
                     b.Navigation("Localidad");
                 });
 
+            modelBuilder.Entity("SSDAP.Api.Models.MedicionCloro", b =>
+                {
+                    b.HasOne("SSDAP.Api.Models.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("CreadoPorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SSDAP.Api.Models.Localidad", null)
+                        .WithMany()
+                        .HasForeignKey("IdLocalidad")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("SSDAP.Api.Models.Pozo", b =>
                 {
                     b.HasOne("SSDAP.Api.Models.FuenteAgua", "FuenteAgua")
@@ -643,24 +878,67 @@ namespace SSDAP.Api.Migrations
 
             modelBuilder.Entity("SSDAP.Api.Models.ProgramacionBateria", b =>
                 {
+                    b.HasOne("SSDAP.Api.Models.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("CreadoPorId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("SSDAP.Api.Models.Bateria", "Bateria")
                         .WithMany()
                         .HasForeignKey("IdBateria")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("SSDAP.Api.Models.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("ModificadoPorId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("Bateria");
                 });
 
-            modelBuilder.Entity("SSDAP.Api.Models.ResultadoMensual", b =>
+            modelBuilder.Entity("SSDAP.Api.Models.ProgramacionPozo", b =>
                 {
-                    b.HasOne("SSDAP.Api.Models.Localidad", "Localidad")
+                    b.HasOne("SSDAP.Api.Models.Pozo", "Pozo")
                         .WithMany()
-                        .HasForeignKey("IdLocalidad")
+                        .HasForeignKey("IdPozo")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SSDAP.Api.Models.ProgramacionBateria", "Programacion")
+                        .WithMany("Pozos")
+                        .HasForeignKey("IdProgramacion")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.Navigation("Pozo");
+
+                    b.Navigation("Programacion");
+                });
+
+            modelBuilder.Entity("SSDAP.Api.Models.ResultadoMensual", b =>
+                {
+                    b.HasOne("SSDAP.Api.Models.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("CreadoPorId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("SSDAP.Api.Models.Localidad", "Localidad")
+                        .WithMany()
+                        .HasForeignKey("IdLocalidad")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.Navigation("Localidad");
+                });
+
+            modelBuilder.Entity("SSDAP.Api.Models.SesionUsuario", b =>
+                {
+                    b.HasOne("SSDAP.Api.Models.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("IdUsuario")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("SSDAP.Api.Models.Usuario", b =>
@@ -691,6 +969,11 @@ namespace SSDAP.Api.Migrations
                     b.Navigation("Localidad");
 
                     b.Navigation("Usuario");
+                });
+
+            modelBuilder.Entity("SSDAP.Api.Models.ProgramacionBateria", b =>
+                {
+                    b.Navigation("Pozos");
                 });
 #pragma warning restore 612, 618
         }

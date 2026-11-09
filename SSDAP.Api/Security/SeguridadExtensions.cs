@@ -21,7 +21,7 @@ public static class SeguridadExtensions
             {
                 ValidateIssuer = true, ValidIssuer = jwt.Emisor,
                 ValidateAudience = true, ValidAudience = jwt.Audiencia,
-                ValidateLifetime = true, ClockSkew = TimeSpan.FromSeconds(30),
+                ValidateLifetime = true, ClockSkew = TimeSpan.Zero,
                 ValidateIssuerSigningKey = true, IssuerSigningKey = jwt.Clave,
                 ValidAlgorithms = [SecurityAlgorithms.HmacSha256],
                 NameClaimType = "sub", RoleClaimType = "permiso"
@@ -38,12 +38,21 @@ public static class SeguridadExtensions
                     var db = context.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
                     var usuario = await db.Usuarios.AsNoTracking().Include(u => u.Rol)
                         .SingleOrDefaultAsync(u => u.IdUsuario == id, context.HttpContext.RequestAborted);
-                    if (usuario is null || !usuario.Activo || !usuario.Rol.Activo)
+                    if (usuario is null || !usuario.Activo || !usuario.Rol.Activo ||
+                        context.Principal?.FindFirstValue("sello") != usuario.SelloSeguridad)
                     {
                         context.Fail("Acceso no disponible.");
                         return;
                     }
                     // El permiso se obtiene de la base en cada petición, no del token emitido.
+                    var sesionId = context.Principal?.FindFirstValue("sid");
+                    var ahora = DateTime.UtcNow;
+                    if (sesionId is null || !await db.SesionesUsuario.AsNoTracking().AnyAsync(
+                        s => s.Id == sesionId && s.IdUsuario == id && s.ExpiraEnUtc > ahora, context.HttpContext.RequestAborted))
+                    {
+                        context.Fail("Sesión vencida por inactividad.");
+                        return;
+                    }
                     var identity = (ClaimsIdentity)context.Principal!.Identity!;
                     foreach (var claim in identity.FindAll("permiso").ToList()) identity.RemoveClaim(claim);
                     if (usuario.Rol.Codigo == JwtService.Administrador)

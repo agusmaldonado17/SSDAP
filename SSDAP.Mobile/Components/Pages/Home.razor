@@ -1,5 +1,151 @@
-﻿@page "/"
-
-<h1>Hello, world!</h1>
-
-Welcome to your new app.
+@page "/"
+@using SSDAP.Shared.DTOs.Autenticacion
+@using SSDAP.Shared.DTOs.Usuarios
+@inject SesionMovil Sesion
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+<div class="mobile-shell">
+<header class="app-header"><strong class="brand">SSDAP<span class="brand-dot" aria-hidden="true"></span></strong>
+@if(Sesion.Vigente && localidad is not null) { <button class="locality-switch" disabled="@ocupado" @onclick="CambiarLocalidad" aria-label="Cambiar localidad"><span>@localidad.Nombre</span><span aria-hidden="true">⌄</span></button> }
+</header>
+<main @key="(vista, localidad?.IdLocalidad, Sesion.Vigente)">
+@if(mensaje is not null) { <p class="notice" role="alert">@mensaje</p> }
+@if(!listo) { <p role="status">Preparando la aplicación…</p> }
+else if(!Sesion.Vigente)
+{
+    <div class="login-intro"><span class="eyebrow">Gestión del agua</span><h1>Bienvenido</h1><p class="muted">Ingresá a tu cuenta para continuar.</p></div>
+    <EditForm Model="login" OnValidSubmit="IngresarAsync"><DataAnnotationsValidator/><ValidationSummary/>
+    <fieldset disabled="@ocupado">
+    <label>Correo electrónico<InputText type="email" autocomplete="username" @bind-Value="login.Email" /></label>
+    <label>Contraseña<InputText type="password" autocomplete="current-password" @bind-Value="login.Password" /></label>
+    <button class="primary full-width" type="submit">@(ocupado ? "Ingresando…" : "Ingresar")</button>
+    </fieldset></EditForm>
+}
+else if(localidad is null)
+{
+    <h1>Elegí una localidad</h1><p>@Sesion.Actual!.Usuario.Nombre @Sesion.Actual.Usuario.Apellido</p>
+    
+    @if(ocupado) { <p role="status">Cargando…</p> }
+    else if(localidades.Count == 0) { <p>No hay localidades disponibles. Consultá al administrador.</p> }
+    @foreach(var item in localidades)
+    { <button class="card locality list-link" @onclick="() => Elegir(item)"><strong>@item.Nombre</strong><span class="muted">@item.Provincia · @item.Estado</span></button> }
+    <button class="danger-quiet" disabled="@ocupado" @onclick="SalirAsync">Cerrar sesión</button>
+}
+else
+{
+    @if(vista == "inicio") { <InicioMovil @key="localidad.IdLocalidad" Localidad="localidad" Ir="CambiarVista" /> }
+    else if(vista == "fuentes") { <FuentesMovil @key="localidad.IdLocalidad" Localidad="localidad" /> }
+    else if(vista == "agenda") { <AgendaMovil @key="localidad.IdLocalidad" Localidad="localidad" /> }
+    else if(vista == "cloro") { <CloroMovil @key="localidad.IdLocalidad" Localidad="localidad" /> }
+    else if(vista == "resultados") { <ResultadosMovil @key="localidad.IdLocalidad" Localidad="localidad" /> }
+    else if(vista == "cuenta") { <CuentaMovil Salir="SalirAsync" /> }
+    else
+    {
+        <h1>Más</h1>
+        <p class="eyebrow">Calidad y resultados</p>
+        <button class="card list-link" @onclick='() => CambiarVista("cloro")'><strong>Cloro medido</strong><span class="muted">Registrar y consultar mediciones</span></button>
+        <button class="card list-link" @onclick='() => CambiarVista("resultados")'><strong>Resultados mensuales</strong><span class="muted">Producción y calidad de la mezcla</span></button>
+        <p class="eyebrow section-label">Tu espacio</p>
+        <button class="card list-link" @onclick='() => CambiarVista("cuenta")'>Mi cuenta</button>
+        <button class="card list-link" @onclick="CambiarLocalidad">Cambiar localidad</button>
+    }
+}
+</main>
+@if(Sesion.Vigente && localidad is not null)
+{
+    <nav class="bottom-nav" aria-label="Navegación principal">
+        @foreach(var opcion in new[] { ("inicio","Inicio"),("fuentes","Fuentes"),("agenda","Agenda"),("mas","Más") })
+        { <button class="@(Activo(opcion.Item1) ? "selected" : "")" aria-current="@(Activo(opcion.Item1) ? "page" : null)" @onclick="() => CambiarVista(opcion.Item1)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="@Icono(opcion.Item1)" /></svg>@opcion.Item2</button> }
+    </nav>
+}
+</div>
+@code {
+    private readonly Credenciales login = new();
+    private string vista="inicio";
+    private string? mensaje;
+    private bool listo,ocupado, eliminado;
+    private LocalidadDto? localidad;
+    private List<LocalidadDto> localidades=[];
+    private IJSObjectReference? modulo;
+    private DotNetObjectReference<Home>? referencia;
+    protected override async Task OnInitializedAsync()
+    {
+        Sesion.Invalidada += Invalidada;
+        await EjecutarAsync(async () => { await Sesion.RestaurarAsync(); if(Sesion.Vigente) await LeerLocalidadesAsync(); });
+        listo=true;
+    }
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if(!firstRender) return;
+        modulo=await JS.InvokeAsync<IJSObjectReference>("import","./sesion.js");
+        referencia=DotNetObjectReference.Create(this);
+        await modulo.InvokeVoidAsync("iniciar",referencia);
+    }
+    private static string Icono(string tab) => tab switch
+    {
+        "inicio" => "M3 10 12 3l9 7M5 9v12h5v-7h4v7h5V9",
+        "fuentes" => "M12 3s-7 8-7 12a7 7 0 0 0 14 0c0-4-7-12-7-12ZM8 15a4 4 0 0 0 4 4",
+        "agenda" => "M5 5h14v16H5ZM8 3v4M16 3v4M5 10h14M8 14h2M14 14h2M8 17h2",
+        _ => "M5 6h14M5 12h14M5 18h14"
+    };
+    private bool Activo(string tab) => tab==vista || tab=="mas" && vista is "cloro" or "resultados" or "cuenta";
+    private void Elegir(LocalidadDto valor) { localidad=valor; vista="inicio"; mensaje=null; }
+    private void CambiarVista(string valor) { vista=valor; mensaje=null; }
+    private void CambiarLocalidad() { localidad=null; vista="inicio"; mensaje=null; }
+    private void Invalidada() { if(!eliminado) _=InvokeAsync(() => { localidad=null; localidades=[]; login.Password=""; mensaje="La sesión finalizó. Volvé a ingresar."; StateHasChanged(); }); }
+    private Task IngresarAsync() => EjecutarAsync(async () =>
+    {
+        try { await Sesion.IngresarAsync(new LoginDto { Email=login.Email.Trim(),Password=login.Password }); }
+        finally { login.Password=""; }
+        await LeerLocalidadesAsync();
+    });
+    private async Task LeerLocalidadesAsync()
+    {
+        localidades=[];
+        await Sesion.ObtenerAsync<UsuarioDto>("api/mi-cuenta");
+        try { localidades=await Sesion.TodasAsync<LocalidadDto>("api/localidades"); }
+        catch(ErrorMovil ex) when(ex.Estado==403) { localidades=await Sesion.TodasAsync<LocalidadDto>("api/mi-cuenta/localidades"); }
+    }
+    private Task SalirAsync() => EjecutarAsync(async () =>
+    {
+        try { await Sesion.CerrarAsync(); CambiarLocalidad(); mensaje="Sesión cerrada."; }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or ErrorMovil)
+        { CambiarLocalidad(); mensaje="Se borró la sesión de este dispositivo, pero no se pudo confirmar el cierre en el servidor. Vencerá por inactividad."; }
+    });
+    private async Task EjecutarAsync(Func<Task> accion)
+    {
+        if(ocupado) return;
+        ocupado=true; mensaje=null;
+        try { await accion(); }
+        catch(ErrorMovil ex) { mensaje=ex.Message; }
+        catch(Exception ex) when(ex is HttpRequestException or TaskCanceledException) { mensaje="No se pudo conectar con la API. Revisá la conexión, la dirección y el certificado del servidor."; }
+        finally { ocupado=false; }
+    }
+    [JSInvokable] public async Task InformarActividad()
+    {
+        if(!Sesion.Vigente || ocupado) return;
+        await EjecutarAsync(Sesion.ActividadAsync);
+        if(!eliminado) await InvokeAsync(StateHasChanged);
+    }
+    [JSInvokable] public Task ComprobarVencimiento()
+    {
+        if(Sesion.Actual is not null && !Sesion.Vigente) Sesion.Limpiar();
+        return Task.CompletedTask;
+    }
+    [JSInvokable] public async Task ReanudarAsync()
+    {
+        await ComprobarVencimiento();
+        if (Sesion.Vigente && !ocupado) await EjecutarAsync(Sesion.RevisarAsync);
+        if (!eliminado) await InvokeAsync(StateHasChanged);
+    }
+    public async ValueTask DisposeAsync()
+    {
+        eliminado=true; Sesion.Invalidada-=Invalidada;
+        if(modulo is not null) { try { await modulo.InvokeVoidAsync("detener"); await modulo.DisposeAsync(); } catch(JSDisconnectedException) { } }
+        referencia?.Dispose();
+    }
+    private sealed class Credenciales {
+        [Required,EmailAddress] public string Email { get; set; }="";
+        [Required,StringLength(128)] public string Password { get; set; }="";
+    }
+}

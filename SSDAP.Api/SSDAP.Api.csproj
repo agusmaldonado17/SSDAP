@@ -26,4 +26,7 @@
     <ProjectReference Include="..\SSDAP.Shared\SSDAP.Shared.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Update="appsettings.Development.json;appsettings.Local.json;appsettings.*.example.json" CopyToPublishDirectory="Never" />
+  </ItemGroup>
 </Project>

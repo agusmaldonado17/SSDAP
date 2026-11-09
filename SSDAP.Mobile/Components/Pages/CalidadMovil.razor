@@ -1,0 +1,44 @@
+@using SSDAP.Shared.DTOs.Calidad
+@inherits PanelMovil
+<h2>Análisis del agua</h2>
+<EstadoMovil Error="@Error" Ocupado="Ocupado" />
+@if(analisis is not null)
+{
+    <button disabled="@Ocupado" @onclick="() => analisis=null">← Historial</button>
+    <p>Análisis del @analisis.Fecha.ToString("dd/MM/yyyy")</p>
+    @foreach(var campo in typeof(MedicionesCalidadDto).GetProperties())
+    {
+        var valor=(decimal?)campo.GetValue(analisis.Mediciones);
+        <div class="measurement"><span>@Presentacion.Parametro(campo.Name)</span><strong>@Presentacion.Numero(valor) @(campo.Name=="Ph" ? "" : campo.Name=="Conductividad" ? "µS/cm" : "mg/L")</strong></div>
+    }
+    <p>@analisis.Observaciones</p>
+    <button disabled="@Ocupado" @onclick="EvaluarAsync">Comparar con límites actuales</button>
+    @if(evaluacion is not null)
+    {
+        <p class="muted">Comparación con la configuración actual; no certifica potabilidad.</p>
+        @foreach(var parametro in evaluacion.Parametros) { <article class="card parameter-card"><strong>@Presentacion.Parametro(parametro.Codigo)</strong><p><span class="state-badge" data-state="@parametro.Estado">@Presentacion.Estado(parametro.Estado)</span></p>@if(parametro.Limite is not null) { <small>Rango: @Presentacion.Numero(parametro.Limite.ValorMinimo,"—") a @Presentacion.Numero(parametro.Limite.ValorMaximo,"—") @parametro.Unidad</small> }</article> }
+    }
+}
+else
+{
+    
+    @foreach(var item in historial) { <button class="card list-link" disabled="@Ocupado" @onclick="() => Abrir(item)"><strong>@item.Fecha.ToString("dd/MM/yyyy")</strong><span class="muted">@(item.Observaciones ?? "Ver resultados")</span></button> }
+    @if(historial.Count==0 && !Ocupado && Error is null) { <p>No hay análisis en esta página.</p> }
+    <div class="pager"><button disabled="@(Ocupado || pagina==1)" @onclick="() => PaginarAsync(-1)">Anterior</button><span>@pagina</span><button disabled="@(Ocupado || historial.Count<50)" @onclick="() => PaginarAsync(1)">Siguiente</button></div>
+}
+@code {
+    [Parameter] public int IdFuente { get; set; }
+    private int pagina=1;
+    private List<AnalisisCalidadDto> historial=[];
+    private AnalisisCalidadDto? analisis;
+    private EvaluacionCalidadDto? evaluacion;
+    protected override Task OnInitializedAsync()=>CargarAsync();
+    private Task CargarAsync()=>CargarPaginaAsync(pagina);
+    private Task CargarPaginaAsync(int destino)=>EjecutarAsync(async()=>{
+        var nuevos=await Sesion.ObtenerAsync<List<AnalisisCalidadDto>>($"{Ruta}/fuentes/{IdFuente}/analisis?pagina={destino}");
+        historial=nuevos;pagina=destino;
+    });
+    private Task PaginarAsync(int delta) => pagina + delta < 1 ? Task.CompletedTask : CargarPaginaAsync(pagina + delta);
+    private void Abrir(AnalisisCalidadDto item) { analisis=item;evaluacion=null;Error=null; }
+    private Task EvaluarAsync()=>EjecutarAsync(async()=>{ evaluacion=null;evaluacion=await Sesion.ObtenerAsync<EvaluacionCalidadDto>($"{Ruta}/fuentes/{IdFuente}/analisis/{analisis!.IdAnalisis}/evaluacion"); });
+}

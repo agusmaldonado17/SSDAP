@@ -1,0 +1,37 @@
+@using SSDAP.Web.Services
+@using SSDAP.Shared.DTOs.Fuentes
+@inherits PanelLocalidadBase
+<span class="eyebrow">@Localidad.Nombre · @Localidad.Provincia</span>
+<h1>Mapa de pozos</h1>
+<p class="muted">Ubicación registrada de los pozos de esta localidad. Seleccioná un punto para ver sus datos.</p>
+<button disabled="@Ocupado" @onclick="CargarAsync">Actualizar</button>
+@if (Error is not null) { <p role="alert">@Error</p> }
+@if (Ocupado) { <p role="status">Cargando pozos…</p> }
+else if (cargado)
+{
+    @if (pozos.Count == 0) { <div class="empty">No hay pozos registrados en esta localidad.</div> }
+    else
+    {
+        <MapaPozos @key="revision" Pozos="pozos" />
+        <details><summary>Pozos y coordenadas (@pozos.Count)</summary>
+        <div class="table-wrap"><table><thead><tr><th>Pozo</th><th>Estado</th><th>Latitud</th><th>Longitud</th></tr></thead><tbody>
+        @foreach (var fuente in pozos)
+        { <tr><td>@fuente.Pozo?.Codigo · @fuente.Fuente.Nombre</td><td>@fuente.Fuente.Estado</td><td>@fuente.Pozo?.Latitud</td><td>@fuente.Pozo?.Longitud</td></tr> }
+        </tbody></table></div></details>
+    }
+}
+@code {
+    private List<FuenteDto> pozos = [];
+    private bool cargado;
+    private int revision;
+    protected override Task OnInitializedAsync() => CargarAsync();
+    private Task CargarAsync() => EjecutarAsync(async () =>
+    {
+        cargado = false; pozos = [];
+        var fuentes = await LeerPaginasAsync<FuenteResumenDto>($"{RutaLocalidad}/fuentes?tipo=Pozo");
+        var detalles = new List<FuenteDto>();
+        foreach (var fuente in fuentes)
+            detalles.Add(await Sesion.ObtenerAsync<FuenteDto>($"{RutaLocalidad}/fuentes/{fuente.IdFuente}"));
+        pozos = detalles; cargado = true; revision++;
+    });
+}

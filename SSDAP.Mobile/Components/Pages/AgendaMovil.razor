@@ -1,0 +1,47 @@
+@using SSDAP.Shared.DTOs.Calendario
+@inherits PanelMovil
+<h1>Agenda</h1>
+<label class="date-picker"><span class="sr-only">Día</span><InputDate @bind-Value="dia" @bind-Value:after="CargarAsync" disabled="@Ocupado" /></label>
+<div class="day-navigation" aria-label="Cambiar día">
+    <button disabled="@(Ocupado || dia.Date <= new DateTime(1000,1,1))" @onclick="() => MoverDiaAsync(-1)" aria-label="Día anterior">← Anterior</button>
+    <button disabled="@Ocupado" @onclick="HoyAsync">Hoy</button>
+    <button disabled="@(Ocupado || dia.Date >= new DateTime(9998,12,31))" @onclick="() => MoverDiaAsync(1)" aria-label="Día siguiente">Siguiente →</button>
+</div>
+<EstadoMovil Error="@Error" Ocupado="Ocupado" />
+@if(consultado is not null)
+{
+    <p class="eyebrow">@turnos.Count @(turnos.Count == 1 ? "turno programado" : "turnos programados")</p>
+    @if(turnos.Count==0) { <p>No hay turnos programados para este día.</p> }
+    @foreach(var turno in turnos) { <article class="card agenda-card"><span class="time-slot">@Horario(turno,consultado.Value)</span><h2>@turno.NombreBateria</h2><details><summary>@turno.Pozos.Count @(turno.Pozos.Count == 1 ? "pozo" : "pozos") · Ver detalle</summary><p class="muted">@Presentacion.Fecha(turno.Inicio!.Value) → @Presentacion.Fecha(turno.Fin!.Value)</p>@foreach(var pozo in turno.Pozos) { <p>@pozo.Codigo · @Presentacion.Numero(pozo.CaudalM3H) m³/h</p> } @if(turno.Observaciones is not null) { <p>@turno.Observaciones</p> }</details></article> }
+}
+@code {
+    private DateTime dia=Presentacion.Ahora.Date;
+    private DateTime? consultado;
+    private List<ProgramacionDto> turnos=[];
+    protected override Task OnInitializedAsync()=>CargarAsync();
+    private Task MoverDiaAsync(int delta)
+    {
+        if (Ocupado) return Task.CompletedTask;
+        dia = dia.Date.AddDays(delta);
+        return CargarAsync();
+    }
+    private Task HoyAsync()
+    {
+        if (Ocupado) return Task.CompletedTask;
+        dia = Presentacion.Ahora.Date;
+        return CargarAsync();
+    }
+    private Task CargarAsync()=>EjecutarAsync(async()=>{
+        consultado=null; turnos=[];
+        if(dia.Year<1000 || dia.Year>9998) throw new ErrorMovil(400,"Seleccioná una fecha válida.");
+        var datos=await Sesion.TodasAsync<ProgramacionDto>($"{Ruta}/calendario?anio={dia.Year}&mes={dia.Month}");
+        turnos=datos.Where(t=>EnDia(t,dia)).OrderBy(t=>t.Inicio).ToList(); consultado=dia.Date;
+    });
+    private static DateTime Local(DateTimeOffset fecha)=>TimeZoneInfo.ConvertTimeBySystemTimeZoneId(fecha,"America/Argentina/Buenos_Aires").DateTime;
+    public static bool EnDia(ProgramacionDto t,DateTime dia)=>t.Estado=="Programada" && t.Inicio is not null && t.Fin is not null && Local(t.Inicio.Value)<dia.Date.AddDays(1) && Local(t.Fin.Value)>dia.Date;
+    public static string Horario(ProgramacionDto t,DateTime dia) {
+        var desde=Local(t.Inicio!.Value); var hasta=Local(t.Fin!.Value); var finDia=dia.Date.AddDays(1);
+        if(desde<=dia.Date && hasta>=finDia) return "Todo el día · 24 h";
+        return $"{(desde<dia.Date ? "00:00" : desde.ToString("HH:mm"))}–{(hasta>=finDia ? "24:00" : hasta.ToString("HH:mm"))}";
+    }
+}

@@ -1,0 +1,31 @@
+<div class="account-menu" @onkeydown="TeclaAsync">
+    <button @ref="disparador" type="button" class="account-trigger" disabled="@Ocupado" aria-label="@($"Cuenta de {Nombre}")" aria-expanded="@abierto" aria-controls="opciones-cuenta" @onclick="() => abierto = !abierto">
+        <span class="account-avatar" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="8" r="3.5"/><path d="M5 21v-2a7 7 0 0 1 14 0v2"/></svg></span>
+        <span class="account-label"><strong>@Nombre</strong><small>@Rol</small></span>
+        <span aria-hidden="true">⌄</span>
+    </button>
+    @if (abierto)
+    {
+        <button type="button" class="account-dismiss" tabindex="-1" aria-label="Cerrar opciones de cuenta" @onclick="() => abierto = false"></button>
+        <div id="opciones-cuenta" class="account-dropdown">
+            <span class="account-dropdown-title">Mi cuenta</span>
+            <button type="button" disabled="@Ocupado" @onclick="PasswordAsync">Cambiar contraseña</button>
+            <button type="button" class="account-signout" disabled="@Ocupado" @onclick="SalirAsync">Cerrar sesión</button>
+        </div>
+    }
+</div>
+@code {
+    [Parameter] public string Nombre { get; set; } = "";
+    [Parameter] public string Rol { get; set; } = "";
+    [Parameter] public bool Ocupado { get; set; }
+    [Parameter] public EventCallback CambiarPassword { get; set; }
+    [Parameter] public EventCallback CerrarSesion { get; set; }
+    private bool abierto;
+    private ElementReference disparador;
+    private async Task PasswordAsync() { abierto = false; await CambiarPassword.InvokeAsync(); }
+    private async Task SalirAsync() { abierto = false; await CerrarSesion.InvokeAsync(); }
+    private async Task TeclaAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape" && abierto) { abierto = false; await disparador.FocusAsync(); }
+    }
+}

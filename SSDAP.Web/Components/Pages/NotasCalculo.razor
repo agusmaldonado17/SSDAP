@@ -1,0 +1,28 @@
+@using SSDAP.Web.Services
+@if (Observaciones.Length > 0)
+{
+    <aside class="report-observations" aria-label="Observaciones del resultado">
+        <strong>Para revisar</strong>
+        <ul>@foreach (var texto in Observaciones) { <li>@texto</li> }</ul>
+    </aside>
+}
+@if (Aclaraciones.Length > 0 || Modelo is not null)
+{
+    <details class="calculation-notes">
+        <summary>Acerca de este cálculo</summary>
+        <ul>@foreach (var texto in Aclaraciones) { <li>@NotasResultado.Texto(texto)</li> }</ul>
+        @if (Modelo is not null) { <small>Referencia del modelo: @Modelo</small> }
+    </details>
+}
+@code {
+    [Parameter] public IEnumerable<string> Advertencias { get; set; } = [];
+    [Parameter] public string? Modelo { get; set; }
+    private string[] Observaciones = [];
+    private string[] Aclaraciones = [];
+    protected override void OnParametersSet()
+    {
+        var textos = Advertencias.Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().ToArray();
+        Observaciones = textos.Where(x => !NotasResultado.EsAclaracion(x)).ToArray();
+        Aclaraciones = textos.Where(NotasResultado.EsAclaracion).ToArray();
+    }
+}
